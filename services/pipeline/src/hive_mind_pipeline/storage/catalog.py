@@ -8,6 +8,8 @@ from typing import Any
 
 import asyncpg
 
+_AGE_SERVER_SETTINGS = {"search_path": 'ag_catalog, "$user", public'}
+
 
 @dataclass
 class CatalogHit:
@@ -27,7 +29,12 @@ class CatalogStore:
 
     async def connect(self) -> None:
         if self._pool is None:
-            self._pool = await asyncpg.create_pool(self._dsn, min_size=1, max_size=8)
+            self._pool = await asyncpg.create_pool(
+                self._dsn,
+                min_size=1,
+                max_size=8,
+                server_settings=_AGE_SERVER_SETTINGS,
+            )
 
     async def close(self) -> None:
         if self._pool is not None:

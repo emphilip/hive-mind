@@ -29,7 +29,9 @@ A single `hive-mind.yaml` file is the source of truth. Environment variables ove
 | `HIVE_MIND__VALKEY__URL` | `redis://valkey:6379/0` | Cache (unused by v0). |
 | `HIVE_MIND__OLLAMA__BASE_URL` | `http://ollama:11434` | Compose-internal Ollama by default. |
 | `HIVE_MIND__OLLAMA__EMBEDDING_MODEL` | `nomic-embed-text` | See "Swapping the embedding model" below. |
-| `HIVE_MIND__OLLAMA__API_KEY` | empty | Reserved for chat-only Cloud paths in follow-up changes. |
+| `HIVE_MIND__PROVIDERS__CHAT__BASE_URL` | `https://ollama.com` | Chat endpoint used by text graph extraction. |
+| `HIVE_MIND__PROVIDERS__CHAT__MODEL` | `gemma3:4b` | Independently configurable extraction model. |
+| `HIVE_MIND__PROVIDERS__CHAT__API_KEY` | empty | Secret bearer token for the chat endpoint. |
 | `HIVE_MIND__RETRIEVAL__DEFAULT_TOP_K` | `20` | Per-leg retrieval limit. |
 | `HIVE_MIND__RETRIEVAL__DEFAULT_TOKEN_BUDGET` | `4000` | Assemble-stage hard cap. |
 
@@ -38,9 +40,24 @@ A single `hive-mind.yaml` file is the source of truth. Environment variables ove
 Two paths share the same chunk → embed → upsert orchestration but differ on what becomes a chunk:
 
 - **Code files** (`.py`, `.ts`, `.go`, `.rs`, `.kt`, ... — anything in graphifyy's tree-sitter dispatch except markdown/yaml/json/html) are processed by `chunk_code_by_symbols`. Each AST symbol (class / function / method) becomes one chunk. The same graphifyy call produces the **deterministic code graph** that lands in `hive_mind.concept` / `hive_mind.relationship_edge` as `confirmed` state. Powered by [graphifyy](https://github.com/safishamsi/graphify).
-- **Text files** (`.md`, `.yaml`, `.toml`, `.json`, ...) flow through `chunk_text` (paragraph splitter). Future LLM-based concept extraction for text content lands with the `add-knowledge-graph` change.
+- **Text files** (`.md`, `.yaml`, `.toml`, `.json`, ...) flow through `chunk_text` (paragraph splitter). A best-effort chat-model pass extracts candidate concepts and named relationships after the catalog and vector writes succeed.
 
-The extractor is observable via the OTel span `pipeline.graph_extract_code` (tokens=0; latency tracked) and writes to the same vector store as text chunks.
+Code extraction emits `pipeline.graph_extract_code` with zero model tokens. Text extraction emits `pipeline.graph_extract_text`, token counts, latency, accepted-edge counters, and error counters. Provider errors, malformed output, and timeouts are logged and counted but never abort ingestion.
+
+## Knowledge graph
+
+Open `/graph` to search concepts, inspect evidence and neighbours, review candidate edges, and edit the relationship vocabulary. The seven seeded semantic relationship names are `depends_on`, `defined_in`, `supersedes`, `mentions`, `related_to`, `causes`, and `derived_from`. Graphifyy also uses the code-specific `calls`, `imports`, and `uses` names.
+
+Text extraction is controlled by:
+
+| Key | Default | Effect |
+|---|---|---|
+| `HIVE_MIND__PROVIDERS__EXTRACTION__ENABLED` | `true` | Enables best-effort text extraction during ingest and re-extract. |
+| `HIVE_MIND__PROVIDERS__EXTRACTION__MIN_CONFIDENCE` | `0.6` | Drops model relationships below this confidence. |
+| `HIVE_MIND__PROVIDERS__EXTRACTION__TIMEOUT_SECONDS` | `30` | Per-chunk chat request deadline. |
+| `HIVE_MIND__PROVIDERS__EXTRACTION__CHAT_QPS` | empty | Reserved rate limit; empty means unbounded. |
+
+The active prompt and JSON response contract are documented in [`EXTRACTOR_PROMPT.md`](./EXTRACTOR_PROMPT.md).
 
 ## Ingestion
 
@@ -65,6 +82,21 @@ docker compose -f infra/compose/docker-compose.yml exec ingestion \
 ```
 
 Re-ingest is idempotent (entities are upserted by stable ID derived from `(tenant, source_uri)`). Run history (from options 2 and 3) is in-memory inside the ingestion container — restarting clears it. A follow-up change adds durable history.
+
+Re-run text graph extraction without re-embedding:
+
+```bash
+docker compose -f infra/compose/docker-compose.yml exec ingestion \
+  uv run --package hive-mind-ingestion \
+  python -m hive_mind_ingestion.cli re-extract
+
+# Optional catalog filters
+docker compose -f infra/compose/docker-compose.yml exec ingestion \
+  uv run --package hive-mind-ingestion \
+  python -m hive_mind_ingestion.cli re-extract --source git --since 2026-06-01
+```
+
+Chunks already processed by the current extractor version are skipped. Failures are counted and the command continues with later chunks.
 
 ## Vector search
 

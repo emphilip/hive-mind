@@ -102,4 +102,55 @@ if [ "${CONCEPT_COUNT:-0}" -lt 5 ] || [ "${EDGE_COUNT:-0}" -lt 5 ] || [ "${SYMBO
 fi
 echo "✓ code graph populated"
 
+say "Knowledge graph vocabulary contains the seven seeded semantic relations"
+VOCAB=$(curl -fsS "$PIPELINE_URL/graph/vocab")
+EXPECTED_VOCAB="depends_on defined_in supersedes mentions related_to causes derived_from"
+MISSING_VOCAB=$(echo "$VOCAB" | python3 -c '
+import json, sys
+expected = set(sys.argv[1].split())
+actual = {item["name"] for item in json.load(sys.stdin)["items"]}
+print(" ".join(sorted(expected - actual)))
+' "$EXPECTED_VOCAB")
+if [ -n "$MISSING_VOCAB" ]; then
+  echo "✗ missing seeded relationship names: $MISSING_VOCAB"
+  exit 1
+fi
+echo "✓ seven seeded relationship names present"
+
+say "Candidate review queue contains an extracted relationship"
+CANDIDATES=$(curl -fsS "$PIPELINE_URL/graph/edges?state=candidate&limit=5")
+CANDIDATE_COUNT=$(echo "$CANDIDATES" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["items"]))')
+if [ "$CANDIDATE_COUNT" -lt 1 ]; then
+  echo "✗ graph extraction produced no candidate edges"
+  exit 1
+fi
+EDGE_ID=$(echo "$CANDIDATES" | python3 -c 'import json,sys; print(json.load(sys.stdin)["items"][0]["edge_id"])')
+CONCEPT_ID=$(echo "$CANDIDATES" | python3 -c 'import json,sys; print(json.load(sys.stdin)["items"][0]["from_concept_id"])')
+echo "✓ candidate edge $EDGE_ID found"
+
+say "Traverse from a known concept returns a non-empty subgraph"
+TRAVERSE=$(curl -fsS "$PIPELINE_URL/graph/traverse?concept_id=$CONCEPT_ID&depth=2&include_candidates=true")
+TRAVERSE_EDGES=$(echo "$TRAVERSE" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["edges"]))')
+if [ "$TRAVERSE_EDGES" -lt 1 ]; then
+  echo "✗ graph traversal returned no edges"
+  exit 1
+fi
+echo "✓ graph traversal returned $TRAVERSE_EDGES edge(s)"
+
+say "Promote one candidate and verify its append-only audit row"
+PROMOTED=$(curl -fsS -X POST "$PIPELINE_URL/graph/edges/$EDGE_ID/promote" \
+  -H 'content-type: application/json' \
+  -d '{"reason":"end-to-end smoke verification"}')
+PROMOTED_STATE=$(echo "$PROMOTED" | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')
+if [ "$PROMOTED_STATE" != "confirmed" ]; then
+  echo "✗ promoted edge did not return confirmed state"
+  exit 1
+fi
+GRAPH_AUDIT_COUNT=$($PSQL "SELECT count(*) FROM hive_mind.graph_audit_log WHERE target_kind='edge' AND target_id='$EDGE_ID'::uuid AND to_state='confirmed'" | tr -d '[:space:]')
+if [ "${GRAPH_AUDIT_COUNT:-0}" -lt 1 ]; then
+  echo "✗ no graph audit row found for promoted edge"
+  exit 1
+fi
+echo "✓ candidate promoted and graph audit row written"
+
 say "Smoke test PASSED"

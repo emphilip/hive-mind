@@ -33,17 +33,17 @@
 
 - [x] 5.1 New module `services/pipeline/src/hive_mind_pipeline/graph/routes.py` mounted at `app.include_router(graph_routes.router)`
 - [x] 5.2 Read endpoints: `GET /graph/vocab`, `GET /graph/concepts`, `GET /graph/concepts/{id}`, `GET /graph/edges`, `GET /graph/traverse`
-- [ ] 5.3 Admin write endpoints: promote/demote/tombstone/patch for concepts and edges; `POST /graph/concepts/merge`; vocab CRUD
-- [ ] 5.4 Every state transition writes a `graph_audit_log` row in the same transaction
+- [x] 5.3 Admin write endpoints: promote/demote/tombstone/patch for concepts and edges; `POST /graph/concepts/merge`; vocab CRUD
+- [x] 5.4 Every state transition writes a `graph_audit_log` row in the same transaction
 - [x] 5.5 AGE-backed traversal using openCypher (`MATCH path = (start)-[:type1|type2*1..depth]-(neighbour) ...`)
-- [ ] 5.6 Endpoint tests with FastAPI TestClient + fake catalog/graph stores
+- [x] 5.6 Endpoint tests with FastAPI TestClient + fake catalog/graph stores
 
 ## 6. Ingestion hook + re-extract CLI
 
 - [x] 6.1 Wire `extract_for_chunk` into `services/ingestion/src/hive_mind_ingestion/pipeline_runner.py` after the Qdrant upsert; try/except + timeout
-- [ ] 6.2 New `hive-mind-ingest re-extract` Click subcommand with `--source` and `--since`
-- [ ] 6.3 Unit tests: extractor failure does not abort the chunk loop, timeout is enforced
-- [ ] 6.4 CLI test for `re-extract` skip-by-extractor-version logic
+- [x] 6.2 New `hive-mind-ingest re-extract` Click subcommand with `--source` and `--since`
+- [x] 6.3 Unit tests: extractor failure does not abort the chunk loop, timeout is enforced
+- [x] 6.4 CLI test for `re-extract` skip-by-extractor-version logic
 
 ## 7. MCP server
 
@@ -53,34 +53,34 @@
 
 ## 8. Admin UI — /graph page
 
-- [ ] 8.1 New route `services/admin-ui/src/app/graph/page.tsx` with tabbed layout: Concepts / Candidate review / Vocabulary
-- [ ] 8.2 Component `ConceptRow` + stories + tests
-- [ ] 8.3 Component `ConceptDetail` (header, neighbours, evidence) + stories + tests
-- [ ] 8.4 Component `CandidateEdgeRow` (per-row promote/demote/edit/delete) + stories + tests
-- [ ] 8.5 Component `RelationshipTypeBadge` + stories + tests
-- [ ] 8.6 Component `VocabRow` + stories + tests
-- [ ] 8.7 Client actions: promote/demote/tombstone/merge for concepts; promote/demote/edit/tombstone for edges; vocab CRUD
-- [ ] 8.8 Next-server route handlers under `src/app/api/proxy/graph/...` forwarding to the pipeline (mirrors existing `/api/proxy/...` pattern)
-- [ ] 8.9 Update nav in `src/app/layout.tsx` to include `Graph`
-- [ ] 8.10 Confirm `pnpm exec next build` and `pnpm build-storybook` are green
+- [x] 8.1 New route `services/admin-ui/src/app/graph/page.tsx` with tabbed layout: Concepts / Candidate review / Vocabulary
+- [x] 8.2 Component `ConceptRow` + stories + tests
+- [x] 8.3 Component `ConceptDetail` (header, neighbours, evidence) + stories + tests
+- [x] 8.4 Component `CandidateEdgeRow` (per-row promote/demote/edit/delete) + stories + tests
+- [x] 8.5 Component `RelationshipTypeBadge` + stories + tests
+- [x] 8.6 Component `VocabRow` + stories + tests
+- [x] 8.7 Client actions: promote/demote/tombstone/merge for concepts; promote/demote/edit/tombstone for edges; vocab CRUD
+- [x] 8.8 Next-server route handlers under `src/app/api/proxy/graph/...` forwarding to the pipeline (mirrors existing `/api/proxy/...` pattern)
+- [x] 8.9 Update nav in `src/app/layout.tsx` to include `Graph`
+- [x] 8.10 Confirm `pnpm exec next build` and `pnpm build-storybook` are green
 
 ## 9. Cross-cutting
 
 - [x] 9.1 `services/pipeline/src/hive_mind_pipeline/storage/catalog.py`: add `get_evidence_chunks(edge_id)`
-- [ ] 9.2 All existing tests still pass (`uv run pytest` and `pnpm -r test`)
-- [ ] 9.3 Compose `pipeline` + `ingestion` rebuild green
-- [ ] 9.4 `OPENSPEC validate --strict` for all three in-flight changes
+- [x] 9.2 All existing tests still pass (`uv run pytest` and `pnpm -r test`)
+- [x] 9.3 Compose `pipeline` + `ingestion` rebuild green
+- [x] 9.4 `OPENSPEC validate --strict` for all three in-flight changes
 
 ## 10. Smoke
 
-- [ ] 10.1 Extend `tests/smoke/run.sh`: after the existing ingest, assert at least one candidate edge exists via `GET /graph/edges?state=candidate&limit=5`; assert vocabulary listing returns the seven seeded names; assert `traverse` from a known concept returns a non-empty subgraph
-- [ ] 10.2 Run smoke against the live stack
-- [ ] 10.3 Pick one candidate edge, promote it via `POST /graph/edges/{id}/promote`, verify `confirmed` + a `graph_audit_log` row exists
+- [x] 10.1 Extend `tests/smoke/run.sh`: after the existing ingest, assert at least one candidate edge exists via `GET /graph/edges?state=candidate&limit=5`; assert vocabulary listing returns the seven seeded names; assert `traverse` from a known concept returns a non-empty subgraph
+- [x] 10.2 Run smoke against the live stack
+- [x] 10.3 Pick one candidate edge, promote it via `POST /graph/edges/{id}/promote`, verify `confirmed` + a `graph_audit_log` row exists
 
 ## 11. Docs
 
-- [ ] 11.1 README: short note pointing at the new `/graph` page and the MCP `traverse_graph` tool now being live
-- [ ] 11.2 `docs/OPERATIONS.md`: section on the relationship vocabulary, extraction tuning (`min_confidence`, `chat_qps`, `extraction.enabled`, `timeout_seconds`), and re-extract CLI
-- [ ] 11.3 `docs/EXTRACTOR_PROMPT.md` (new): exact prompt template + response schema, so operators can reason about why the model produced what it produced
+- [x] 11.1 README: short note pointing at the new `/graph` page and the MCP `traverse_graph` tool now being live
+- [x] 11.2 `docs/OPERATIONS.md`: section on the relationship vocabulary, extraction tuning (`min_confidence`, `chat_qps`, `extraction.enabled`, `timeout_seconds`), and re-extract CLI
+- [x] 11.3 `docs/EXTRACTOR_PROMPT.md` (new): exact prompt template + response schema, so operators can reason about why the model produced what it produced
 
 ## 12. Commit + push

@@ -68,7 +68,10 @@ BEGIN
     SELECT 1 FROM ag_label
     WHERE name = 'Concept' AND graph = (SELECT graphid FROM ag_graph WHERE name = 'hive_mind')
   ) THEN
-    PERFORM create_vlabel('hive_mind', 'Concept');
+    PERFORM ag_catalog.create_vlabel(
+      'hive_mind'::cstring,
+      'Concept'::cstring
+    );
   END IF;
 
   -- Edge labels (one per vocabulary entry)
@@ -77,7 +80,10 @@ BEGIN
       SELECT 1 FROM ag_label
       WHERE name = v_name AND graph = (SELECT graphid FROM ag_graph WHERE name = 'hive_mind')
     ) THEN
-      PERFORM create_elabel('hive_mind', v_name);
+      PERFORM ag_catalog.create_elabel(
+        'hive_mind'::cstring,
+        v_name::cstring
+      );
     END IF;
   END LOOP;
 END

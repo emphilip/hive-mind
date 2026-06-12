@@ -90,6 +90,53 @@ class FakeGraph:
         self.last = ("traverse", kwargs)
         return self.traverse_result
 
+    async def transition_concept(self, **kwargs):
+        self.last = ("transition_concept", kwargs)
+        return {**_concept(kwargs["concept_id"], kwargs["state"]), "reason": kwargs["reason"]}
+
+    async def patch_concept(self, **kwargs):
+        self.last = ("patch_concept", kwargs)
+        return {**_concept(kwargs["concept_id"]), **kwargs["changes"]}
+
+    async def transition_edge(self, **kwargs):
+        self.last = ("transition_edge", kwargs)
+        return {**_edge(kwargs["edge_id"], kwargs["state"]), "reason": kwargs["reason"]}
+
+    async def patch_edge(self, **kwargs):
+        self.last = ("patch_edge", kwargs)
+        return {**_edge(kwargs["edge_id"]), **kwargs["changes"]}
+
+    async def create_vocabulary(self, **kwargs):
+        self.last = ("create_vocabulary", kwargs)
+        return {**kwargs["data"], "deprecated_at": None}
+
+    async def patch_vocabulary(self, **kwargs):
+        self.last = ("patch_vocabulary", kwargs)
+        return {
+            "name": kwargs["name"],
+            "description": kwargs["changes"].get("description", ""),
+            "inverse": None,
+            "directed": True,
+            "deprecated_at": None,
+        }
+
+    async def deprecate_vocabulary(self, **kwargs):
+        self.last = ("deprecate_vocabulary", kwargs)
+        return {
+            "name": kwargs["name"],
+            "description": "",
+            "inverse": None,
+            "directed": True,
+            "deprecated_at": datetime(2026, 6, 12),
+        }
+
+    async def merge_concepts(self, **kwargs):
+        self.last = ("merge_concepts", kwargs)
+        return {
+            **_concept(kwargs["into_id"]),
+            "aliases": [f"Concept {item}" for item in kwargs["from_ids"]],
+        }
+
 
 def _client(graph: FakeGraph | None = None) -> tuple[TestClient, FakeGraph]:
     app = FastAPI()
@@ -206,3 +253,97 @@ def test_traverse_enforces_caps():
     assert client.get(
         "/graph/traverse", params={"concept_id": "c1", "limit": 201}
     ).status_code == 422
+
+
+def test_concept_state_transitions_and_patch():
+    client, graph = _client()
+    response = client.post("/graph/concepts/c1/promote", json={"reason": "reviewed"})
+    assert response.status_code == 200
+    assert response.json()["state"] == "confirmed"
+    assert graph.last == (
+        "transition_concept",
+        {
+            "tenant": "default",
+            "concept_id": "c1",
+            "state": "confirmed",
+            "actor": "local-dev",
+            "reason": "reviewed",
+        },
+    )
+
+    response = client.patch(
+        "/graph/concepts/c1",
+        json={"description": "updated", "aliases": ["alias"], "reason": "cleanup"},
+    )
+    assert response.status_code == 200
+    assert response.json()["description"] == "updated"
+    assert graph.last[0] == "patch_concept"
+    assert graph.last[1]["changes"] == {
+        "description": "updated",
+        "aliases": ["alias"],
+    }
+
+
+def test_edge_state_transitions_and_patch():
+    client, graph = _client()
+    response = client.post("/graph/edges/e1/demote", json={"reason": "uncertain"})
+    assert response.status_code == 200
+    assert response.json()["state"] == "candidate"
+    assert graph.last[0] == "transition_edge"
+
+    response = client.patch(
+        "/graph/edges/e1",
+        json={"type": "mentions", "reason": "corrected"},
+    )
+    assert response.status_code == 200
+    assert response.json()["type"] == "mentions"
+    assert graph.last[0] == "patch_edge"
+    assert graph.last[1]["changes"] == {"type": "mentions"}
+
+
+def test_vocabulary_crud():
+    client, graph = _client()
+    response = client.post(
+        "/graph/vocab",
+        json={
+            "name": "compatible_with",
+            "description": "compatible",
+            "directed": False,
+        },
+    )
+    assert response.status_code == 201
+    assert graph.last[0] == "create_vocabulary"
+
+    response = client.patch(
+        "/graph/vocab/compatible_with",
+        json={"description": "updated"},
+    )
+    assert response.status_code == 200
+    assert response.json()["description"] == "updated"
+
+    response = client.post(
+        "/graph/vocab/compatible_with/deprecate",
+        json={"reason": "unused"},
+    )
+    assert response.status_code == 200
+    assert response.json()["deprecated_at"] is not None
+
+
+def test_merge_concepts():
+    client, graph = _client()
+    response = client.post(
+        "/graph/concepts/merge",
+        json={"into_id": "c1", "from_ids": ["c2", "c3"], "reason": "duplicates"},
+    )
+    assert response.status_code == 200
+    assert response.json()["concept_id"] == "c1"
+    assert graph.last == (
+        "merge_concepts",
+        {
+            "tenant": "default",
+            "into_id": "c1",
+            "from_ids": ["c2", "c3"],
+            "actor": "local-dev",
+            "reason": "duplicates",
+        },
+    )

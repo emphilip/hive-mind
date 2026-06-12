@@ -69,8 +69,7 @@ async def write_text_graph(
                 if not dedupe:
                     continue
                 concept_id = _concept_uuid(tenant, dedupe)
-                name_to_id[dedupe] = concept_id
-                await conn.execute(
+                stored_concept = await conn.fetchrow(
                     """
                     INSERT INTO hive_mind.concept (
                       concept_id, tenant, name, dedupe_key, description,
@@ -81,12 +80,14 @@ async def write_text_graph(
                     )
                     ON CONFLICT (tenant, dedupe_key) DO UPDATE SET
                       description = COALESCE(EXCLUDED.description, hive_mind.concept.description),
-                      aliases = (
-                        SELECT array_agg(DISTINCT a)
-                        FROM unnest(hive_mind.concept.aliases || EXCLUDED.aliases) AS a
+                      aliases = COALESCE(
+                        (SELECT array_agg(DISTINCT a)
+                         FROM unnest(hive_mind.concept.aliases || EXCLUDED.aliases) AS a),
+                        '{}'::text[]
                       ),
                       extractor_version = EXCLUDED.extractor_version,
                       updated_at = now()
+                    RETURNING concept_id::text, state
                     """,
                     concept_id,
                     tenant,
@@ -99,12 +100,14 @@ async def write_text_graph(
                     extractor_version,
                     chunk_entity_id,
                 )
+                concept_id = str(stored_concept["concept_id"])
+                name_to_id[dedupe] = concept_id
                 await reflect_concept(
                     conn,
                     concept_id=concept_id,
                     tenant=tenant,
                     name=c.name.strip(),
-                    state="candidate",
+                    state=str(stored_concept["state"]),
                 )
                 concepts_written += 1
 
@@ -134,7 +137,7 @@ async def write_text_graph(
                 )
                 name_to_id.setdefault(to_dedupe, to_id)
                 edge_id = _edge_uuid(tenant, from_id, r.relation, to_id)
-                await conn.execute(
+                stored_edge = await conn.fetchrow(
                     """
                     INSERT INTO hive_mind.relationship_edge (
                       edge_id, tenant, type, from_concept_id, to_concept_id,
@@ -144,6 +147,7 @@ async def write_text_graph(
                       confidence = GREATEST(hive_mind.relationship_edge.confidence, EXCLUDED.confidence),
                       extractor_version = EXCLUDED.extractor_version,
                       updated_at = now()
+                    RETURNING edge_id::text, state, confidence
                     """,
                     edge_id,
                     tenant,
@@ -154,6 +158,7 @@ async def write_text_graph(
                     float(r.confidence),
                     extractor_version,
                 )
+                edge_id = str(stored_edge["edge_id"])
                 await reflect_edge(
                     conn,
                     edge_id=edge_id,
@@ -161,8 +166,8 @@ async def write_text_graph(
                     relationship_type=r.relation,
                     from_concept_id=from_id,
                     to_concept_id=to_id,
-                    state="candidate",
-                    confidence=float(r.confidence),
+                    state=str(stored_edge["state"]),
+                    confidence=float(stored_edge["confidence"]),
                 )
                 await conn.execute(
                     """
@@ -190,13 +195,22 @@ async def _ensure_concept(
     chunk_entity_id: str,
 ) -> str:
     concept_id = _concept_uuid(tenant, dedupe)
-    await conn.execute(
+    stored_concept = await conn.fetchrow(
         """
-        INSERT INTO hive_mind.concept (
-          concept_id, tenant, name, dedupe_key,
-          state, confidence, extractor_version, source_entity_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (tenant, dedupe_key) DO NOTHING
+        WITH inserted AS (
+          INSERT INTO hive_mind.concept (
+            concept_id, tenant, name, dedupe_key,
+            state, confidence, extractor_version, source_entity_id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (tenant, dedupe_key) DO NOTHING
+          RETURNING concept_id, state
+        )
+        SELECT concept_id::text, state FROM inserted
+        UNION ALL
+        SELECT concept_id::text, state
+        FROM hive_mind.concept
+        WHERE tenant = $2 AND dedupe_key = $4
+        LIMIT 1
         """,
         concept_id,
         tenant,
@@ -207,12 +221,13 @@ async def _ensure_concept(
         extractor_version,
         chunk_entity_id,
     )
+    concept_id = str(stored_concept["concept_id"])
     await reflect_concept(
         conn,
         concept_id=concept_id,
         tenant=tenant,
         name=name.strip(),
-        state="candidate",
+        state=str(stored_concept["state"]),
     )
     return concept_id
 

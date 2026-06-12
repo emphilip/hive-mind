@@ -22,14 +22,34 @@ class _Tx:
 
 
 class _Conn:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        returned_concepts: list[dict[str, str]] | None = None,
+        returned_edges: list[dict[str, object]] | None = None,
+    ) -> None:
         self.statements: list[tuple[str, tuple[object, ...]]] = []
+        self.returned_concepts = list(returned_concepts or [])
+        self.returned_edges = list(returned_edges or [])
         self.tx_started = False
         self.tx_finished = False
         self.rolled_back = False
 
     async def execute(self, sql: str, *args: object) -> None:
         self.statements.append((sql, args))
+
+    async def fetchrow(self, sql: str, *args: object) -> dict[str, object]:
+        self.statements.append((sql, args))
+        if "INSERT INTO hive_mind.relationship_edge" in sql:
+            if self.returned_edges:
+                return self.returned_edges.pop(0)
+            return {
+                "edge_id": str(args[0]),
+                "state": "candidate",
+                "confidence": args[6],
+            }
+        if self.returned_concepts:
+            return self.returned_concepts.pop(0)
+        return {"concept_id": str(args[0]), "state": "candidate"}
 
     def transaction(self) -> _Tx:
         return _Tx(self)
@@ -109,6 +129,57 @@ async def test_writes_normalized_concepts_edge_evidence_and_age():
         for sql, _ in conn.statements
     )
     assert conn.tx_started and conn.tx_finished and not conn.rolled_back
+
+
+@pytest.mark.asyncio
+async def test_uses_authoritative_concept_ids_after_dedupe_conflict():
+    conn = _Conn(
+        returned_concepts=[
+            {"concept_id": "existing-code-id", "state": "confirmed"},
+            {"concept_id": "stored-token-id", "state": "candidate"},
+        ],
+        returned_edges=[
+            {
+                "edge_id": "existing-code-edge",
+                "state": "confirmed",
+                "confidence": 1.0,
+            }
+        ],
+    )
+    await write_text_graph(
+        catalog=_catalog(conn),
+        tenant="default",
+        chunk_entity_id="chunk-1",
+        result=_result(),
+        extractor_version="text-extractor/test",
+    )
+
+    edge_insert = next(
+        args
+        for sql, args in conn.statements
+        if "INSERT INTO hive_mind.relationship_edge" in sql
+    )
+    assert edge_insert[3:5] == ("existing-code-id", "stored-token-id")
+    evidence_insert = next(
+        args
+        for sql, args in conn.statements
+        if "INSERT INTO hive_mind.relationship_evidence" in sql
+    )
+    assert evidence_insert[0] == "existing-code-edge"
+    reflected = [
+        args[0]
+        for sql, args in conn.statements
+        if "MERGE (concept:Concept" in sql
+    ]
+    assert '"concept_id": "existing-code-id"' in reflected[0]
+    assert '"state": "confirmed"' in reflected[0]
+    edge_reflection = next(
+        args[0]
+        for sql, args in conn.statements
+        if "MERGE (source)-[edge:depends_on" in sql
+    )
+    assert '"edge_id": "existing-code-edge"' in edge_reflection
+    assert '"state": "confirmed"' in edge_reflection
 
 
 @pytest.mark.asyncio

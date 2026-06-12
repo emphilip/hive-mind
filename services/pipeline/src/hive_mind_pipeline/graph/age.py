@@ -41,8 +41,8 @@ async def reflect_concept(
                 concept.state = $state
             RETURN concept
           $cypher$,
-          $1::agtype
-        ) AS (concept agtype)
+          $1::ag_catalog.agtype
+        ) AS (concept ag_catalog.agtype)
         """,
         params,
     )
@@ -84,8 +84,33 @@ async def reflect_edge(
                 edge.confidence = $confidence
             RETURN edge
           $cypher$,
-          $1::agtype
-        ) AS (edge agtype)
+          $1::ag_catalog.agtype
+        ) AS (edge ag_catalog.agtype)
+        """,
+        params,
+    )
+
+
+async def delete_reflected_edge(
+    conn: Any,
+    *,
+    edge_id: str,
+    relationship_type: str,
+) -> None:
+    if not _LABEL_RE.fullmatch(relationship_type):
+        raise ValueError(f"invalid AGE edge label: {relationship_type!r}")
+    params = json.dumps({"edge_id": edge_id})
+    await conn.execute(
+        f"""
+        SELECT * FROM ag_catalog.cypher(
+          'hive_mind',
+          $cypher$
+            MATCH ()-[edge:{relationship_type} {{edge_id: $edge_id}}]->()
+            DELETE edge
+            RETURN count(edge)
+          $cypher$,
+          $1::ag_catalog.agtype
+        ) AS (deleted ag_catalog.agtype)
         """,
         params,
     )

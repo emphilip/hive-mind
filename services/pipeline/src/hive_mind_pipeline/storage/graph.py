@@ -8,7 +8,14 @@ from typing import Any
 
 import asyncpg
 
+from hive_mind_pipeline.graph.age import (
+    delete_reflected_edge,
+    reflect_concept,
+    reflect_edge,
+)
+
 _RELATION_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_AGE_SERVER_SETTINGS = {"search_path": 'ag_catalog, "$user", public'}
 
 
 class GraphStore:
@@ -18,7 +25,12 @@ class GraphStore:
 
     async def connect(self) -> None:
         if self._pool is None:
-            self._pool = await asyncpg.create_pool(self._dsn, min_size=1, max_size=8)
+            self._pool = await asyncpg.create_pool(
+                self._dsn,
+                min_size=1,
+                max_size=8,
+                server_settings=_AGE_SERVER_SETTINGS,
+            )
 
     async def close(self) -> None:
         if self._pool is not None:
@@ -258,8 +270,7 @@ class GraphStore:
             params = json.dumps(
                 {
                     "concept_id": concept_id,
-                    "states": states,
-                    "limit": limit,
+                    "candidate_limit": min(limit * 10, 2000),
                 }
             )
             peer_rows = await conn.fetch(
@@ -271,29 +282,35 @@ class GraphStore:
                     MATCH (start:Concept {{concept_id: $concept_id}})
                           -[edges{relation_pattern}*1..{depth}]-
                           (peer:Concept)
-                    WHERE all(edge IN edges WHERE edge.state IN $states)
                     RETURN DISTINCT peer.concept_id
-                    LIMIT $limit
+                    LIMIT $candidate_limit
                   $cypher$,
-                  $1::agtype
-                ) AS (concept_id agtype)
+                  $1::ag_catalog.agtype
+                ) AS (concept_id ag_catalog.agtype)
                 """,
                 params,
             )
             ids = [concept_id]
             ids.extend(_agtype_text(row["concept_id"]) for row in peer_rows)
-            ids = list(dict.fromkeys(ids))[:limit]
-            nodes = await conn.fetch(
+            candidate_ids = list(dict.fromkeys(ids))
+            candidate_nodes = await conn.fetch(
                 """
                 SELECT concept_id::text, tenant, name, state, confidence,
                        aliases, symbol_id, symbol_kind, updated_at, tombstoned_at
                 FROM hive_mind.concept
-                WHERE tenant = $1 AND concept_id = ANY($2::uuid[])
+                WHERE tenant = $1
+                  AND concept_id = ANY($2::uuid[])
+                  AND state <> 'tombstoned'
                 """,
                 tenant,
-                ids,
+                candidate_ids,
             )
-            edges = await conn.fetch(
+            node_by_id = {
+                str(row["concept_id"]): dict(row)
+                for row in candidate_nodes
+            }
+            active_ids = list(node_by_id)
+            edge_rows = await conn.fetch(
                 """
                 SELECT edge_id::text, tenant, type, from_concept_id::text,
                        to_concept_id::text, state, confidence, extractor_version,
@@ -307,14 +324,605 @@ class GraphStore:
                 ORDER BY confidence DESC
                 """,
                 tenant,
-                ids,
+                active_ids,
                 states,
                 types,
             )
+            edges = [dict(row) for row in edge_rows]
+            reachable_ids = _reachable_ids(
+                concept_id=concept_id,
+                edges=edges,
+                depth=depth,
+                limit=limit,
+            )
+            reachable_set = set(reachable_ids)
         return {
-            "nodes": [dict(row) for row in nodes],
-            "edges": [dict(row) for row in edges],
+            "nodes": [node_by_id[node_id] for node_id in reachable_ids],
+            "edges": [
+                edge
+                for edge in edges
+                if edge["from_concept_id"] in reachable_set
+                and edge["to_concept_id"] in reachable_set
+            ],
         }
+
+    async def transition_concept(
+        self,
+        *,
+        tenant: str,
+        concept_id: str,
+        state: str,
+        actor: str,
+        reason: str | None,
+    ) -> dict[str, Any] | None:
+        async with self._require_pool().acquire() as conn:
+            async with conn.transaction():
+                before = await conn.fetchrow(
+                    "SELECT * FROM hive_mind.concept WHERE tenant = $1 AND concept_id = $2 FOR UPDATE",
+                    tenant,
+                    concept_id,
+                )
+                if before is None:
+                    return None
+                before_data = dict(before)
+                if before_data["state"] == state:
+                    return before_data
+                row = await conn.fetchrow(
+                    """
+                    UPDATE hive_mind.concept
+                    SET state = $3,
+                        tombstoned_at = CASE WHEN $3 = 'tombstoned' THEN COALESCE(tombstoned_at, now()) ELSE NULL END,
+                        updated_at = now()
+                    WHERE tenant = $1 AND concept_id = $2
+                    RETURNING *
+                    """,
+                    tenant,
+                    concept_id,
+                    state,
+                )
+                after = dict(row)
+                await reflect_concept(
+                    conn,
+                    concept_id=str(after["concept_id"]),
+                    tenant=tenant,
+                    name=after["name"],
+                    state=after["state"],
+                )
+                await _write_audit(
+                    conn,
+                    actor=actor,
+                    tenant=tenant,
+                    target_kind="concept",
+                    target_id=concept_id,
+                    from_state=before_data["state"],
+                    to_state=state,
+                    reason=reason,
+                    before=before_data,
+                    after=after,
+                )
+                return after
+
+    async def patch_concept(
+        self,
+        *,
+        tenant: str,
+        concept_id: str,
+        actor: str,
+        reason: str | None,
+        changes: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        allowed = {key: value for key, value in changes.items() if key in {"name", "description", "aliases"}}
+        if not allowed:
+            raise ValueError("no editable concept fields supplied")
+        async with self._require_pool().acquire() as conn:
+            async with conn.transaction():
+                before = await conn.fetchrow(
+                    "SELECT * FROM hive_mind.concept WHERE tenant = $1 AND concept_id = $2 FOR UPDATE",
+                    tenant,
+                    concept_id,
+                )
+                if before is None:
+                    return None
+                current = dict(before)
+                name = allowed.get("name", current["name"])
+                dedupe_key = _normalise_name(name)
+                row = await conn.fetchrow(
+                    """
+                    UPDATE hive_mind.concept
+                    SET name = $3, dedupe_key = $4, description = $5,
+                        aliases = $6, updated_at = now()
+                    WHERE tenant = $1 AND concept_id = $2
+                    RETURNING *
+                    """,
+                    tenant,
+                    concept_id,
+                    name,
+                    dedupe_key,
+                    allowed.get("description", current["description"]),
+                    allowed.get("aliases", current["aliases"]),
+                )
+                after = dict(row)
+                await reflect_concept(
+                    conn,
+                    concept_id=str(after["concept_id"]),
+                    tenant=tenant,
+                    name=after["name"],
+                    state=after["state"],
+                )
+                await _write_audit(
+                    conn,
+                    actor=actor,
+                    tenant=tenant,
+                    target_kind="concept",
+                    target_id=concept_id,
+                    from_state=current["state"],
+                    to_state=after["state"],
+                    reason=reason or "concept patched",
+                    before=current,
+                    after=after,
+                )
+                return after
+
+    async def transition_edge(
+        self,
+        *,
+        tenant: str,
+        edge_id: str,
+        state: str,
+        actor: str,
+        reason: str | None,
+    ) -> dict[str, Any] | None:
+        async with self._require_pool().acquire() as conn:
+            async with conn.transaction():
+                before = await conn.fetchrow(
+                    "SELECT * FROM hive_mind.relationship_edge WHERE tenant = $1 AND edge_id = $2 FOR UPDATE",
+                    tenant,
+                    edge_id,
+                )
+                if before is None:
+                    return None
+                before_data = dict(before)
+                if before_data["state"] == state:
+                    return before_data
+                row = await conn.fetchrow(
+                    """
+                    UPDATE hive_mind.relationship_edge
+                    SET state = $3,
+                        tombstoned_at = CASE WHEN $3 = 'tombstoned' THEN COALESCE(tombstoned_at, now()) ELSE NULL END,
+                        updated_at = now()
+                    WHERE tenant = $1 AND edge_id = $2
+                    RETURNING *
+                    """,
+                    tenant,
+                    edge_id,
+                    state,
+                )
+                after = dict(row)
+                await reflect_edge(
+                    conn,
+                    edge_id=str(after["edge_id"]),
+                    tenant=tenant,
+                    relationship_type=after["type"],
+                    from_concept_id=str(after["from_concept_id"]),
+                    to_concept_id=str(after["to_concept_id"]),
+                    state=after["state"],
+                    confidence=float(after["confidence"]),
+                )
+                await _write_audit(
+                    conn,
+                    actor=actor,
+                    tenant=tenant,
+                    target_kind="edge",
+                    target_id=edge_id,
+                    from_state=before_data["state"],
+                    to_state=state,
+                    reason=reason,
+                    before=before_data,
+                    after=after,
+                )
+                return after
+
+    async def patch_edge(
+        self,
+        *,
+        tenant: str,
+        edge_id: str,
+        actor: str,
+        reason: str | None,
+        changes: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        allowed = {
+            key: value
+            for key, value in changes.items()
+            if key in {"type", "from_concept_id", "to_concept_id"}
+        }
+        if not allowed:
+            raise ValueError("no editable edge fields supplied")
+        async with self._require_pool().acquire() as conn:
+            async with conn.transaction():
+                before = await conn.fetchrow(
+                    "SELECT * FROM hive_mind.relationship_edge WHERE tenant = $1 AND edge_id = $2 FOR UPDATE",
+                    tenant,
+                    edge_id,
+                )
+                if before is None:
+                    return None
+                current = dict(before)
+                relationship_type = allowed.get("type", current["type"])
+                await _assert_active_vocab(conn, relationship_type)
+                row = await conn.fetchrow(
+                    """
+                    UPDATE hive_mind.relationship_edge
+                    SET type = $3, from_concept_id = $4, to_concept_id = $5,
+                        updated_at = now()
+                    WHERE tenant = $1 AND edge_id = $2
+                    RETURNING *
+                    """,
+                    tenant,
+                    edge_id,
+                    relationship_type,
+                    allowed.get("from_concept_id", current["from_concept_id"]),
+                    allowed.get("to_concept_id", current["to_concept_id"]),
+                )
+                after = dict(row)
+                await delete_reflected_edge(
+                    conn,
+                    edge_id=edge_id,
+                    relationship_type=current["type"],
+                )
+                await reflect_edge(
+                    conn,
+                    edge_id=edge_id,
+                    tenant=tenant,
+                    relationship_type=after["type"],
+                    from_concept_id=str(after["from_concept_id"]),
+                    to_concept_id=str(after["to_concept_id"]),
+                    state=after["state"],
+                    confidence=float(after["confidence"]),
+                )
+                await _write_audit(
+                    conn,
+                    actor=actor,
+                    tenant=tenant,
+                    target_kind="edge",
+                    target_id=edge_id,
+                    from_state=current["state"],
+                    to_state=after["state"],
+                    reason=reason or "edge patched",
+                    before=current,
+                    after=after,
+                )
+                return after
+
+    async def create_vocabulary(
+        self,
+        *,
+        tenant: str,
+        actor: str,
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        name = _validated_relation(data["name"])
+        async with self._require_pool().acquire() as conn:
+            async with conn.transaction():
+                existing = await conn.fetchrow(
+                    "SELECT * FROM hive_mind.relationship_vocab WHERE name = $1",
+                    name,
+                )
+                if existing is not None:
+                    raise ValueError("vocab_name_in_use")
+                row = await conn.fetchrow(
+                    """
+                    INSERT INTO hive_mind.relationship_vocab
+                      (name, description, inverse, directed)
+                    VALUES ($1, $2, $3, $4)
+                    RETURNING *
+                    """,
+                    name,
+                    data.get("description") or "",
+                    data.get("inverse"),
+                    data.get("directed", True),
+                )
+                after = dict(row)
+                await conn.execute(
+                    """
+                    SELECT ag_catalog.create_elabel(
+                      'hive_mind'::cstring,
+                      $1::text::cstring
+                    )
+                    """,
+                    name,
+                )
+                await _write_audit(
+                    conn,
+                    actor=actor,
+                    tenant=tenant,
+                    target_kind="vocab",
+                    target_id=name,
+                    from_state=None,
+                    to_state="active",
+                    reason="vocabulary created",
+                    before=None,
+                    after=after,
+                )
+                return after
+
+    async def patch_vocabulary(
+        self,
+        *,
+        tenant: str,
+        name: str,
+        actor: str,
+        changes: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        async with self._require_pool().acquire() as conn:
+            async with conn.transaction():
+                before = await conn.fetchrow(
+                    "SELECT * FROM hive_mind.relationship_vocab WHERE name = $1 FOR UPDATE",
+                    name,
+                )
+                if before is None:
+                    return None
+                current = dict(before)
+                row = await conn.fetchrow(
+                    """
+                    UPDATE hive_mind.relationship_vocab
+                    SET description = $2, inverse = $3, directed = $4
+                    WHERE name = $1
+                    RETURNING *
+                    """,
+                    name,
+                    changes.get("description", current["description"]),
+                    changes.get("inverse", current["inverse"]),
+                    changes.get("directed", current["directed"]),
+                )
+                after = dict(row)
+                await _write_audit(
+                    conn,
+                    actor=actor,
+                    tenant=tenant,
+                    target_kind="vocab",
+                    target_id=name,
+                    from_state="active" if current["deprecated_at"] is None else "deprecated",
+                    to_state="active" if after["deprecated_at"] is None else "deprecated",
+                    reason="vocabulary patched",
+                    before=current,
+                    after=after,
+                )
+                return after
+
+    async def deprecate_vocabulary(
+        self, *, tenant: str, name: str, actor: str, reason: str | None
+    ) -> dict[str, Any] | None:
+        async with self._require_pool().acquire() as conn:
+            async with conn.transaction():
+                before = await conn.fetchrow(
+                    "SELECT * FROM hive_mind.relationship_vocab WHERE name = $1 FOR UPDATE",
+                    name,
+                )
+                if before is None:
+                    return None
+                current = dict(before)
+                if current["deprecated_at"] is not None:
+                    return current
+                row = await conn.fetchrow(
+                    """
+                    UPDATE hive_mind.relationship_vocab
+                    SET deprecated_at = now()
+                    WHERE name = $1
+                    RETURNING *
+                    """,
+                    name,
+                )
+                after = dict(row)
+                await _write_audit(
+                    conn,
+                    actor=actor,
+                    tenant=tenant,
+                    target_kind="vocab",
+                    target_id=name,
+                    from_state="active",
+                    to_state="deprecated",
+                    reason=reason,
+                    before=current,
+                    after=after,
+                )
+                return after
+
+    async def merge_concepts(
+        self,
+        *,
+        tenant: str,
+        into_id: str,
+        from_ids: list[str],
+        actor: str,
+        reason: str | None,
+    ) -> dict[str, Any] | None:
+        source_ids = list(dict.fromkeys(item for item in from_ids if item != into_id))
+        if not source_ids:
+            raise ValueError("from_ids must contain a concept other than into_id")
+        async with self._require_pool().acquire() as conn:
+            async with conn.transaction():
+                into_row = await conn.fetchrow(
+                    "SELECT * FROM hive_mind.concept WHERE tenant = $1 AND concept_id = $2 FOR UPDATE",
+                    tenant,
+                    into_id,
+                )
+                if into_row is None:
+                    return None
+                sources = await conn.fetch(
+                    """
+                    SELECT * FROM hive_mind.concept
+                    WHERE tenant = $1 AND concept_id = ANY($2::uuid[])
+                    FOR UPDATE
+                    """,
+                    tenant,
+                    source_ids,
+                )
+                if len(sources) != len(source_ids):
+                    raise ValueError("one or more merge source concepts were not found")
+
+                edges = await conn.fetch(
+                    """
+                    SELECT * FROM hive_mind.relationship_edge
+                    WHERE tenant = $1
+                      AND (from_concept_id = ANY($2::uuid[])
+                        OR to_concept_id = ANY($2::uuid[]))
+                    FOR UPDATE
+                    """,
+                    tenant,
+                    source_ids,
+                )
+                for edge_row in edges:
+                    edge = dict(edge_row)
+                    edge_id = str(edge["edge_id"])
+                    new_from = (
+                        into_id
+                        if str(edge["from_concept_id"]) in source_ids
+                        else str(edge["from_concept_id"])
+                    )
+                    new_to = (
+                        into_id
+                        if str(edge["to_concept_id"]) in source_ids
+                        else str(edge["to_concept_id"])
+                    )
+                    duplicate = await conn.fetchrow(
+                        """
+                        SELECT * FROM hive_mind.relationship_edge
+                        WHERE tenant = $1 AND from_concept_id = $2
+                          AND type = $3 AND to_concept_id = $4
+                          AND edge_id <> $5
+                        FOR UPDATE
+                        """,
+                        tenant,
+                        new_from,
+                        edge["type"],
+                        new_to,
+                        edge_id,
+                    )
+                    await delete_reflected_edge(
+                        conn,
+                        edge_id=edge_id,
+                        relationship_type=edge["type"],
+                    )
+                    if duplicate is not None:
+                        duplicate_id = str(duplicate["edge_id"])
+                        await conn.execute(
+                            """
+                            UPDATE hive_mind.relationship_evidence
+                            SET edge_id = $1
+                            WHERE edge_id = $2
+                            """,
+                            duplicate_id,
+                            edge_id,
+                        )
+                        await conn.execute(
+                            "DELETE FROM hive_mind.relationship_edge WHERE edge_id = $1",
+                            edge_id,
+                        )
+                        continue
+                    updated = await conn.fetchrow(
+                        """
+                        UPDATE hive_mind.relationship_edge
+                        SET from_concept_id = $2, to_concept_id = $3, updated_at = now()
+                        WHERE edge_id = $1
+                        RETURNING *
+                        """,
+                        edge_id,
+                        new_from,
+                        new_to,
+                    )
+                    await reflect_edge(
+                        conn,
+                        edge_id=edge_id,
+                        tenant=tenant,
+                        relationship_type=updated["type"],
+                        from_concept_id=str(updated["from_concept_id"]),
+                        to_concept_id=str(updated["to_concept_id"]),
+                        state=updated["state"],
+                        confidence=float(updated["confidence"]),
+                    )
+
+                into_before = dict(into_row)
+                merged_aliases = list(into_before["aliases"] or [])
+                for source in sources:
+                    source_data = dict(source)
+                    merged_aliases.extend(source_data["aliases"] or [])
+                    merged_aliases.append(source_data["name"])
+                merged_aliases = sorted(
+                    {
+                        alias.strip()
+                        for alias in merged_aliases
+                        if alias and alias.strip() and alias.strip() != into_before["name"]
+                    }
+                )
+                into_after_row = await conn.fetchrow(
+                    """
+                    UPDATE hive_mind.concept
+                    SET aliases = $3, updated_at = now()
+                    WHERE tenant = $1 AND concept_id = $2
+                    RETURNING *
+                    """,
+                    tenant,
+                    into_id,
+                    merged_aliases,
+                )
+                into_after = dict(into_after_row)
+                await reflect_concept(
+                    conn,
+                    concept_id=into_id,
+                    tenant=tenant,
+                    name=into_after["name"],
+                    state=into_after["state"],
+                )
+                await _write_audit(
+                    conn,
+                    actor=actor,
+                    tenant=tenant,
+                    target_kind="concept",
+                    target_id=into_id,
+                    from_state=into_before["state"],
+                    to_state=into_after["state"],
+                    reason=reason or "concept merge target updated",
+                    before=into_before,
+                    after=into_after,
+                )
+
+                for source in sources:
+                    before = dict(source)
+                    source_id = str(before["concept_id"])
+                    after_row = await conn.fetchrow(
+                        """
+                        UPDATE hive_mind.concept
+                        SET state = 'tombstoned',
+                            tombstoned_at = COALESCE(tombstoned_at, now()),
+                            updated_at = now()
+                        WHERE tenant = $1 AND concept_id = $2
+                        RETURNING *
+                        """,
+                        tenant,
+                        source_id,
+                    )
+                    after = dict(after_row)
+                    await reflect_concept(
+                        conn,
+                        concept_id=source_id,
+                        tenant=tenant,
+                        name=after["name"],
+                        state="tombstoned",
+                    )
+                    await _write_audit(
+                        conn,
+                        actor=actor,
+                        tenant=tenant,
+                        target_kind="concept",
+                        target_id=source_id,
+                        from_state=before["state"],
+                        to_state="tombstoned",
+                        reason=reason or f"merged into {into_id}",
+                        before=before,
+                        after=after,
+                    )
+                return into_after
 
 
 def _validated_relation(name: str) -> str:
@@ -330,3 +938,90 @@ def _agtype_text(value: Any) -> str:
         return str(decoded)
     except json.JSONDecodeError:
         return text.strip('"')
+
+
+def _normalise_name(name: str) -> str:
+    return " ".join(name.strip().lower().split())
+
+
+def _reachable_ids(
+    *,
+    concept_id: str,
+    edges: list[dict[str, Any]],
+    depth: int,
+    limit: int,
+) -> list[str]:
+    if limit <= 1:
+        return [concept_id]
+
+    adjacency: dict[str, set[str]] = {}
+    for edge in edges:
+        source = str(edge["from_concept_id"])
+        target = str(edge["to_concept_id"])
+        adjacency.setdefault(source, set()).add(target)
+        adjacency.setdefault(target, set()).add(source)
+
+    ordered = [concept_id]
+    seen = {concept_id}
+    frontier = {concept_id}
+    for _ in range(depth):
+        next_frontier: set[str] = set()
+        for current in sorted(frontier):
+            for peer in sorted(adjacency.get(current, ())):
+                if peer in seen:
+                    continue
+                seen.add(peer)
+                ordered.append(peer)
+                next_frontier.add(peer)
+                if len(ordered) >= limit:
+                    return ordered
+        if not next_frontier:
+            break
+        frontier = next_frontier
+    return ordered
+
+
+async def _assert_active_vocab(conn: Any, name: str) -> None:
+    active = await conn.fetchval(
+        """
+        SELECT EXISTS(
+          SELECT 1 FROM hive_mind.relationship_vocab
+          WHERE name = $1 AND deprecated_at IS NULL
+        )
+        """,
+        name,
+    )
+    if not active:
+        raise ValueError("vocab_deprecated_or_unknown")
+
+
+async def _write_audit(
+    conn: Any,
+    *,
+    actor: str,
+    tenant: str,
+    target_kind: str,
+    target_id: str,
+    from_state: str | None,
+    to_state: str | None,
+    reason: str | None,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+) -> None:
+    await conn.execute(
+        """
+        INSERT INTO hive_mind.graph_audit_log (
+          actor, tenant, target_kind, target_id, from_state, to_state,
+          reason, before, after
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)
+        """,
+        actor,
+        tenant,
+        target_kind,
+        target_id,
+        from_state,
+        to_state,
+        reason,
+        json.dumps(before, default=str) if before is not None else None,
+        json.dumps(after, default=str) if after is not None else None,
+    )

@@ -7,6 +7,10 @@ import type {
   EntityListItem,
   EntityListResponse,
   IngestionRun,
+  ConceptDetail,
+  ConceptListItem,
+  RelationshipEdge,
+  RelationshipType,
   VectorSearchResponse,
 } from "@hive-mind/shared";
 
@@ -151,4 +155,53 @@ export async function runGit(repoUrl: string): Promise<IngestionRun | null> {
   });
   if (!res.ok) return null;
   return (await res.json()) as IngestionRun;
+}
+
+// --- Knowledge graph ------------------------------------------------------
+
+export async function listGraphConcepts(params: {
+  state?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<{ items: ConceptListItem[]; total: number }> {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") qs.set(key, String(value));
+  }
+  const res = await fetch(`${PIPELINE_URL}/graph/concepts?${qs}`, NO_STORE);
+  if (!res.ok) return { items: [], total: 0 };
+  return (await res.json()) as { items: ConceptListItem[]; total: number };
+}
+
+export async function getGraphConcept(id: string): Promise<ConceptDetail | null> {
+  const res = await fetch(`${PIPELINE_URL}/graph/concepts/${id}`, NO_STORE);
+  if (!res.ok) return null;
+  return (await res.json()) as ConceptDetail;
+}
+
+export interface GraphEdgeItem extends RelationshipEdge {
+  evidence_entity_ids?: string[];
+}
+
+export async function listGraphEdges(params: {
+  state?: string;
+  type?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<{ items: GraphEdgeItem[]; total: number }> {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") qs.set(key, String(value));
+  }
+  const res = await fetch(`${PIPELINE_URL}/graph/edges?${qs}`, NO_STORE);
+  if (!res.ok) return { items: [], total: 0 };
+  return (await res.json()) as { items: GraphEdgeItem[]; total: number };
+}
+
+export async function listGraphVocabulary(): Promise<RelationshipType[]> {
+  const res = await fetch(`${PIPELINE_URL}/graph/vocab`, NO_STORE);
+  if (!res.ok) return [];
+  const body = (await res.json()) as { items: RelationshipType[] };
+  return body.items;
 }

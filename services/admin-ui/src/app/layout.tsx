@@ -25,6 +25,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <a href="/vectors">Vectors</a>
             <a href="/entities">Entities</a>
             <a href="/ingestion">Ingestion</a>
+            <a href="/graph">Graph</a>
           </nav>
         </header>
         <main style={{ padding: "16px 24px", maxWidth: 1200, margin: "0 auto" }}>{children}</main>

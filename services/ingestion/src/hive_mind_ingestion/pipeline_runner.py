@@ -19,6 +19,7 @@ from opentelemetry import trace
 from hive_mind_ingestion.chunking import chunk_code_by_symbols, chunk_text, is_code_path
 from hive_mind_ingestion.connectors.git import GitDocument
 from hive_mind_ingestion.graph_writer import write_code_graph
+from hive_mind_ingestion.reextract import current_extractor_version
 from hive_mind_ingestion.text_graph_writer import load_vocabulary, write_text_graph
 from hive_mind_pipeline.graph.extract import extract_for_chunk
 from hive_mind_pipeline.providers import OllamaChat, OllamaEmbeddings
@@ -169,7 +170,7 @@ async def ingest_documents(
                                 tenant=cfg.tenant,
                                 chunk_entity_id=chunk_id,
                                 result=result,
-                                extractor_version=f"text-extractor/{chat.model}",
+                                extractor_version=current_extractor_version(chat.model),
                             )
                     except Exception as exc:  # noqa: BLE001
                         log.info(

@@ -37,6 +37,20 @@ const config: StorybookConfig = {
           ) {
             return;
           }
+          if (
+            warning.code === "MODULE_LEVEL_DIRECTIVE" &&
+            warning.message.includes('"use client"')
+          ) {
+            return;
+          }
+          if (
+            warning.code === "SOURCEMAP_ERROR" &&
+            (warning.id?.endsWith("CandidateEdgeRow.tsx") ||
+              warning.id?.endsWith("GraphActions.tsx") ||
+              warning.id?.endsWith("VocabRow.tsx"))
+          ) {
+            return;
+          }
           warn(warning);
         },
       },

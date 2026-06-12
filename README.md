@@ -8,10 +8,11 @@ Hive Mind is a dockerized set of services that lets a single person or an organi
 
 ## Status
 
-The **thin MVP** (first end-to-end working slice) is implemented and in compose, plus an admin UI for vector search, entity inspection, and ingestion control. The full v0 vision is broader and is being delivered through a series of OpenSpec changes:
+The **thin MVP** (first end-to-end working slice) is implemented and in compose, plus an admin UI for vector search, entity inspection, ingestion control, and knowledge-graph review. The full v0 vision is broader and is being delivered through a series of OpenSpec changes:
 
 - **[`bootstrap-thin-mvp`](./openspec/changes/bootstrap-thin-mvp/proposal.md)** — the authoritative contract for the original v0 stack: TS MCP server, 4-stage retrieval pipeline, git ingestion CLI, query review page, immutable audit log, local Ollama embeddings, Docker Compose dev profile.
 - **[`add-admin-vector-and-content`](./openspec/changes/add-admin-vector-and-content/proposal.md)** — admin UI surfaces for **vector search**, **entity browse + detail (with tombstone)**, and **ingestion control**. Pipeline gains entity read endpoints, a vector-search endpoint, and ingestion proxies; ingestion gains an HTTP surface alongside the CLI. Strict-validated, 44 tasks.
+- **[`add-knowledge-graph`](./openspec/changes/add-knowledge-graph/proposal.md)** — named concept relationships, deterministic code graphs, best-effort text extraction, graph traversal, candidate review, and editable vocabulary.
 - **[`add-foundation`](./openspec/changes/add-foundation/proposal.md)** — the **full v0 vision** spanning 12 capabilities (knowledge graph with named relationships, intent classifier, rerank+compress, OPA, additional connectors, enrichment workers, full admin UI, OTel/Tempo/Grafana stack, etc.). Each deferred capability ships as its own follow-up change that MODIFIES the requirements earlier changes set.
 
 ## Credits
@@ -47,7 +48,7 @@ curl -sS -X POST http://localhost:8000/retrieve \
 # 4. Open the admin UI: http://localhost:3000/queries
 ```
 
-The admin UI ships four pages:
+The admin UI ships five pages:
 
 | Route | What it does |
 |---|---|
@@ -55,6 +56,7 @@ The admin UI ships four pages:
 | `/vectors` | Search the catalogue by meaning. Top-K results with score, source, snippet |
 | `/entities` | Filterable, paginated entity browser; click through to detail, lineage, and a tombstone action |
 | `/ingestion` | Connector list + last-run summaries; "Run now" form for git ingests |
+| `/graph` | Search concepts, review candidate relationships, inspect evidence, and manage the relationship vocabulary |
 
 ## Where to read
 
@@ -68,15 +70,15 @@ The admin UI ships four pages:
 
 ## What's actually in the v0 stack today
 
-- **TypeScript MCP server** (`services/mcp-server`) advertising five tools; only `hive_mind/retrieve_for_context` is functional, the other four return `not_implemented_in_mvp`.
+- **TypeScript MCP server** (`services/mcp-server`) advertising five tools. `hive_mind/retrieve_for_context` and `hive_mind/traverse_graph` are live; the other three return `not_implemented_in_mvp`.
 - **Python retrieval pipeline** (`services/pipeline`) with four stages: identity → hybrid retrieval (Qdrant dense + Postgres FTS lexical, fused via RRF) → assemble (budget + hardcoded role→classification allow-list) → return.
-- **Python ingestion** (`services/ingestion`) with a `hive-mind-ingest git <url>` CLI: clone, walk text files, chunk, embed via the compose Ollama, upsert into Postgres + Qdrant.
-- **Next.js admin UI** (`services/admin-ui`) with a query review list at `/queries` and an audit detail page at `/queries/[id]`. Storybook scaffolded with stories for every shared component.
-- **Storage**: Postgres 16 + Apache AGE (graph extension loaded, but no edges yet — reserved for the knowledge-graph follow-up), Qdrant, Valkey, plus a compose-internal Ollama service that pulls the embedding model on first start.
+- **Python ingestion** (`services/ingestion`) with a `hive-mind-ingest git <url>` CLI: clone, chunk, embed, write Postgres + Qdrant, derive code relationships with graphifyy, and extract candidate text relationships with the configured chat model.
+- **Next.js admin UI** (`services/admin-ui`) with query, vector, content, ingestion, and graph-review pages. Storybook includes stories for every shared component.
+- **Storage**: Postgres 16 + Apache AGE for the catalog, audit, and named knowledge graph; Qdrant for vectors; Valkey for cache; plus compose-internal Ollama embeddings.
 - **Observability emission**: OTel spans per stage with token attributes; Prometheus counters at `/metrics`. The collector + Grafana stack is a follow-up change.
 - **Immutable audit log** at `hive_mind.audit_log` (partitioned by week, row-level immutability trigger).
 
-What is NOT in v0: knowledge-graph CRUD, intent classifier, OPA enforcement, Confluence/custom-API/web connectors, background enrichment workers, the Tempo/Loki/Prometheus/Grafana stack, `local-prod` compose profile, real auth.
+What is NOT in v0: intent classifier, OPA enforcement, Confluence/custom-API/web connectors, background enrichment workers, the Tempo/Loki/Prometheus/Grafana stack, `local-prod` compose profile, real auth.
 
 ## Working with the spec
 
