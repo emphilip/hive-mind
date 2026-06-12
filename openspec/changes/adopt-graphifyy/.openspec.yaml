@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-06-12
+goal: Replace ~150 lines of hand-rolled file walking + chunking with a
+  battle-tested tree-sitter-based library that covers 28 languages, and get a
+  deterministic code graph for free.
