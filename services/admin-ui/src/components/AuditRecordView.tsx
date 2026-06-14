@@ -1,3 +1,6 @@
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { TokenBar } from "./TokenBar";
 
 export interface AuditRecordViewProps {
@@ -24,8 +27,12 @@ export interface AuditRecordViewProps {
 function Pair({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: 12, color: "var(--muted)" }}>{label}</div>
-      <div style={{ fontFamily: typeof value === "string" && value.length > 20 ? "monospace" : "inherit" }}>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div
+        className={cn(
+          typeof value === "string" && value.length > 20 && "font-mono"
+        )}
+      >
         {value}
       </div>
     </div>
@@ -34,57 +41,51 @@ function Pair({ label, value }: { label: string; value: React.ReactNode }) {
 
 export function AuditRecordView({ record }: AuditRecordViewProps) {
   return (
-    <article style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <header style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-        <h2 style={{ margin: 0 }}>Audit #{record.id}</h2>
-        <span
-          style={{
-            color: record.outcome === "ok" ? "var(--success)" : "var(--error)",
-            fontWeight: 600,
-          }}
+    <article className="flex flex-col gap-4">
+      <header className="flex items-baseline gap-3">
+        <h2 className="m-0">Audit #{record.id}</h2>
+        <Badge
+          variant={record.outcome === "ok" ? "secondary" : "destructive"}
+          className={cn(
+            record.outcome === "ok" &&
+              "text-emerald-600 dark:text-emerald-400"
+          )}
         >
           {record.outcome.toUpperCase()}
-        </span>
+        </Badge>
       </header>
 
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: 12,
-          padding: 12,
-          border: "1px solid var(--border)",
-          borderRadius: 6,
-        }}
-      >
-        <Pair label="created_at" value={new Date(record.created_at).toLocaleString()} />
-        <Pair label="correlation_id" value={record.correlation_id} />
-        <Pair label="tenant" value={record.tenant} />
-        <Pair label="principal" value={record.principal} />
-        <Pair label="roles" value={record.roles.join(", ")} />
-        <Pair label="tool" value={record.tool} />
-        <Pair label="latency_ms" value={`${record.latency_ms} ms`} />
-        <Pair label="final_context_hash" value={record.final_context_hash.slice(0, 16) + "…"} />
-        <Pair label="error_code" value={record.error_code ?? "—"} />
+      <Card>
+        <CardContent className="grid grid-cols-3 gap-3 p-3">
+          <Pair label="created_at" value={new Date(record.created_at).toLocaleString()} />
+          <Pair label="correlation_id" value={record.correlation_id} />
+          <Pair label="tenant" value={record.tenant} />
+          <Pair label="principal" value={record.principal} />
+          <Pair label="roles" value={record.roles.join(", ")} />
+          <Pair label="tool" value={record.tool} />
+          <Pair label="latency_ms" value={`${record.latency_ms} ms`} />
+          <Pair label="final_context_hash" value={record.final_context_hash.slice(0, 16) + "…"} />
+          <Pair label="error_code" value={record.error_code ?? "—"} />
+        </CardContent>
+      </Card>
+
+      <section>
+        <div className="mb-1 text-xs text-muted-foreground">Query</div>
+        <pre className="m-0 rounded-md bg-muted p-3 text-sm">{record.query}</pre>
       </section>
 
       <section>
-        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Query</div>
-        <pre style={{ margin: 0 }}>{record.query}</pre>
-      </section>
-
-      <section>
-        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Token usage</div>
+        <div className="mb-1 text-xs text-muted-foreground">Token usage</div>
         <TokenBar tokens_in={record.tokens_in} tokens_out={record.tokens_out} />
       </section>
 
       <section>
-        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>
+        <div className="mb-1 text-xs text-muted-foreground">
           Candidates ({record.candidate_ids.length}) → final ({record.final_entity_ids.length})
         </div>
-        <ul style={{ margin: 0, paddingLeft: 18 }}>
+        <ul className="m-0 list-disc pl-5">
           {record.final_entity_ids.map((id) => (
-            <li key={id} style={{ fontFamily: "monospace" }}>
+            <li key={id} className="font-mono">
               {id}
             </li>
           ))}

@@ -3,6 +3,9 @@
 import { useState } from "react";
 import type { VectorSearchHit, VectorSearchResponse } from "@hive-mind/shared";
 import { VectorHit } from "@/components/VectorHit";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 async function runSearch(query: string, topK: number): Promise<VectorSearchResponse | null> {
   const res = await fetch("/api/proxy/search/vector", {
@@ -48,65 +51,35 @@ export function VectorExplorer() {
 
   return (
     <div>
-      <form onSubmit={submit} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
-        <input
+      <form onSubmit={submit} className="mb-3 flex items-center gap-2">
+        <Input
           name="query"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search the catalogue…"
-          style={{
-            flex: 1,
-            padding: "8px 10px",
-            border: "1px solid var(--border)",
-            borderRadius: 4,
-            fontSize: 14,
-          }}
+          className="flex-1"
         />
-        <input
+        <Input
           type="number"
           name="top_k"
           value={topK}
           min={1}
           max={100}
           onChange={(e) => setTopK(Number(e.target.value))}
-          style={{
-            width: 80,
-            padding: "8px 10px",
-            border: "1px solid var(--border)",
-            borderRadius: 4,
-          }}
+          className="w-20"
         />
-        <button
-          type="submit"
-          disabled={busy}
-          style={{
-            padding: "8px 16px",
-            background: "var(--accent)",
-            color: "white",
-            border: "none",
-            borderRadius: 4,
-            cursor: busy ? "wait" : "pointer",
-          }}
-        >
+        <Button type="submit" disabled={busy} className={busy ? "cursor-wait" : ""}>
           {busy ? "Searching…" : "Search"}
-        </button>
+        </Button>
       </form>
 
       {error ? (
-        <div style={{ color: "var(--error)", padding: 12 }}>{error}</div>
+        <div className="p-3 text-red-600 dark:text-red-400">{error}</div>
       ) : null}
 
       {response ? (
         <>
-          <div
-            style={{
-              color: "var(--muted)",
-              fontSize: 12,
-              marginBottom: 8,
-              display: "flex",
-              gap: 16,
-            }}
-          >
+          <div className="mb-2 flex gap-4 text-xs text-muted-foreground">
             <span>
               {response.hits.length} hit{response.hits.length === 1 ? "" : "s"}
             </span>
@@ -118,9 +91,9 @@ export function VectorExplorer() {
             </span>
             <span>tokens_in: {response.tokens_in}</span>
           </div>
-          <div style={{ border: "1px solid var(--border)", borderRadius: 6 }}>
+          <Card className="overflow-hidden">
             {response.hits.length === 0 ? (
-              <div style={{ padding: 24, color: "var(--muted)" }}>No hits.</div>
+              <div className="p-6 text-muted-foreground">No hits.</div>
             ) : (
               response.hits.map((h, i) => (
                 <VectorHit
@@ -131,7 +104,7 @@ export function VectorExplorer() {
                 />
               ))
             )}
-          </div>
+          </Card>
         </>
       ) : null}
     </div>

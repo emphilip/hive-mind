@@ -1,5 +1,6 @@
 import { ConnectorCard } from "@/components/ConnectorCard";
 import { IngestionRunRow } from "@/components/IngestionRunRow";
+import { Card } from "@/components/ui/card";
 import { listConnectors, listRecentRuns } from "@/lib/api";
 import { RunNowPanel } from "./RunNowPanel";
 
@@ -24,22 +25,16 @@ export default async function IngestionPage() {
   return (
     <section>
       <h1>Ingestion</h1>
-      <p style={{ color: "var(--muted)", marginTop: 0 }}>
+      <p className="mt-0 text-muted-foreground">
         Connectors configured in this deploy. Run history is in-memory and will
         clear on service restart (durable history lands with a follow-up change).
       </p>
 
-      <section style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Connectors</h2>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: 8,
-          }}
-        >
+      <section className="mb-4">
+        <h2 className="mb-2 text-base font-semibold">Connectors</h2>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-2">
           {connectors.length === 0 ? (
-            <div style={{ color: "var(--muted)" }}>
+            <div className="text-muted-foreground">
               Could not reach ingestion service — is the stack up?
             </div>
           ) : (
@@ -54,40 +49,20 @@ export default async function IngestionPage() {
         </div>
       </section>
 
-      <section style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Run now (git)</h2>
+      <section className="mb-4">
+        <h2 className="mb-2 text-base font-semibold">Run now (git)</h2>
         <RunNowPanel />
       </section>
 
       <section>
-        <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Recent runs</h2>
+        <h2 className="mb-2 text-base font-semibold">Recent runs</h2>
         {runs.length === 0 ? (
-          <div
-            style={{
-              padding: 24,
-              border: "1px dashed var(--border)",
-              borderRadius: 6,
-              color: "var(--muted)",
-            }}
-          >
+          <div className="rounded-md border border-dashed p-6 text-muted-foreground">
             No runs yet.
           </div>
         ) : (
-          <div style={{ border: "1px solid var(--border)", borderRadius: 6 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "100px 1fr 100px 90px 90px 90px",
-                gap: 12,
-                padding: "8px 12px",
-                borderBottom: "1px solid var(--border)",
-                background: "var(--code-bg)",
-                fontSize: 11,
-                color: "var(--muted)",
-                fontWeight: 600,
-                textTransform: "uppercase",
-              }}
-            >
+          <Card className="overflow-hidden">
+            <div className="grid grid-cols-[100px_1fr_100px_90px_90px_90px] gap-3 border-b bg-muted px-3 py-2 text-[11px] font-semibold uppercase text-muted-foreground">
               <span>status</span>
               <span>repo</span>
               <span>started</span>
@@ -98,7 +73,7 @@ export default async function IngestionPage() {
             {runs.map((r) => (
               <IngestionRunRow key={r.run_id} run={r} />
             ))}
-          </div>
+          </Card>
         )}
       </section>
     </section>

@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 async function send(path: string, method: string, body: object) {
   return fetch(`/api/proxy/graph/${path}`, {
@@ -41,11 +43,11 @@ export function ConceptActions({ conceptId }: { conceptId: string }) {
     router.refresh();
   }
   return (
-    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-      <button disabled={busy} onClick={() => transition("promote")}>Promote</button>
-      <button disabled={busy} onClick={() => transition("demote")}>Demote</button>
-      <button disabled={busy} onClick={merge}>Merge into…</button>
-      <button disabled={busy} onClick={tombstone}>Tombstone</button>
+    <div className="mb-3 flex gap-2">
+      <Button size="sm" disabled={busy} onClick={() => transition("promote")}>Promote</Button>
+      <Button size="sm" variant="secondary" disabled={busy} onClick={() => transition("demote")}>Demote</Button>
+      <Button size="sm" variant="outline" disabled={busy} onClick={merge}>Merge into…</Button>
+      <Button size="sm" variant="destructive" disabled={busy} onClick={tombstone}>Tombstone</Button>
     </div>
   );
 }
@@ -63,10 +65,10 @@ export function VocabCreateForm() {
     router.refresh();
   }
   return (
-    <form onSubmit={submit} style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-      <input aria-label="Relationship name" value={name} onChange={(event) => setName(event.target.value)} placeholder="relationship_name" />
-      <input aria-label="Relationship description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description" />
-      <button type="submit">Add type</button>
+    <form onSubmit={submit} className="mb-3 flex gap-2">
+      <Input aria-label="Relationship name" value={name} onChange={(event) => setName(event.target.value)} placeholder="relationship_name" className="max-w-xs" />
+      <Input aria-label="Relationship description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description" className="max-w-sm" />
+      <Button type="submit" variant="secondary">Add type</Button>
     </form>
   );
 }

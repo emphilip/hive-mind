@@ -1,7 +1,9 @@
+import { Badge } from "@/components/ui/badge";
+
 export function RelationshipTypeBadge({ type }: { type: string }) {
   return (
-    <code style={{ padding: "2px 6px", borderRadius: 4, background: "var(--code-bg)" }}>
+    <Badge variant="secondary" className="font-mono font-normal">
       {type}
-    </code>
+    </Badge>
   );
 }

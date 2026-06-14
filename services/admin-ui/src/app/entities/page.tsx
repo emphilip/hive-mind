@@ -1,4 +1,5 @@
 import { EntityRow } from "@/components/EntityRow";
+import { Button } from "@/components/ui/button";
 import { listEntities } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,9 @@ function num(v: string | undefined, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+const inputClass =
+  "h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
 export default async function EntitiesPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const limit = Math.min(200, num(params.limit, 50));
@@ -33,54 +37,31 @@ export default async function EntitiesPage({ searchParams }: PageProps) {
 
   return (
     <section>
-      <h1>Entities</h1>
-      <p style={{ color: "var(--muted)", marginTop: 0 }}>
+      <h1 className="text-2xl font-semibold tracking-tight">Entities</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
         {result.total} matching · showing {result.items.length} (offset {offset})
       </p>
 
       <form
         method="get"
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 8,
-          marginBottom: 12,
-          padding: 12,
-          border: "1px solid var(--border)",
-          borderRadius: 6,
-        }}
+        className="mb-3 flex flex-wrap items-center gap-2 rounded-md border bg-card p-3"
       >
         <input
           name="source"
           placeholder="source (e.g. git)"
           defaultValue={params.source ?? ""}
-          style={{
-            padding: "6px 10px",
-            border: "1px solid var(--border)",
-            borderRadius: 4,
-            fontSize: 13,
-          }}
+          className={inputClass}
         />
         <input
           name="classification"
           placeholder="classification"
           defaultValue={params.classification ?? ""}
-          style={{
-            padding: "6px 10px",
-            border: "1px solid var(--border)",
-            borderRadius: 4,
-            fontSize: 13,
-          }}
+          className={inputClass}
         />
         <select
           name="freshness_state"
           defaultValue={params.freshness_state ?? ""}
-          style={{
-            padding: "6px 10px",
-            border: "1px solid var(--border)",
-            borderRadius: 4,
-            fontSize: 13,
-          }}
+          className={inputClass}
         >
           <option value="">freshness — any</option>
           <option value="fresh">fresh</option>
@@ -88,49 +69,22 @@ export default async function EntitiesPage({ searchParams }: PageProps) {
           <option value="unknown">unknown</option>
         </select>
         <input type="hidden" name="limit" value={limit} />
-        <button
-          type="submit"
-          style={{
-            padding: "6px 16px",
-            background: "var(--accent)",
-            color: "white",
-            border: "none",
-            borderRadius: 4,
-            cursor: "pointer",
-          }}
-        >
+        <Button type="submit" size="sm">
           Apply
-        </button>
+        </Button>
       </form>
 
       {result.items.length === 0 ? (
-        <div
-          style={{
-            padding: 24,
-            border: "1px dashed var(--border)",
-            borderRadius: 6,
-            color: "var(--muted)",
-          }}
-        >
+        <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
           No entities match. Try ingesting a repo from the{" "}
-          <a href="/ingestion">ingestion page</a>.
+          <a href="/ingestion" className="text-primary underline-offset-4 hover:underline">
+            ingestion page
+          </a>
+          .
         </div>
       ) : (
-        <div style={{ border: "1px solid var(--border)", borderRadius: 6 }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 80px 90px 90px 140px 50px",
-              gap: 12,
-              padding: "8px 12px",
-              borderBottom: "1px solid var(--border)",
-              background: "var(--code-bg)",
-              fontSize: 11,
-              color: "var(--muted)",
-              fontWeight: 600,
-              textTransform: "uppercase",
-            }}
-          >
+        <div className="overflow-hidden rounded-md border">
+          <div className="grid grid-cols-[1fr_80px_90px_90px_140px_50px] gap-3 border-b bg-muted px-3 py-2 text-[11px] font-semibold uppercase text-muted-foreground">
             <span>title / uri</span>
             <span>source</span>
             <span>class</span>
@@ -174,19 +128,27 @@ function Pagination({
 
   if (total <= limit) return null;
   return (
-    <nav style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
+    <nav className="mt-3 flex justify-between text-sm">
       <a
         href={offset > 0 ? `?${qs(prev)}` : undefined}
-        style={{ color: offset > 0 ? "var(--accent)" : "var(--muted)" }}
+        className={
+          offset > 0
+            ? "text-primary underline-offset-4 hover:underline"
+            : "text-muted-foreground"
+        }
       >
         ← prev
       </a>
-      <span style={{ color: "var(--muted)" }}>
+      <span className="text-muted-foreground">
         {offset + 1}–{Math.min(total, offset + limit)} of {total}
       </span>
       <a
         href={next < total ? `?${qs(next)}` : undefined}
-        style={{ color: next < total ? "var(--accent)" : "var(--muted)" }}
+        className={
+          next < total
+            ? "text-primary underline-offset-4 hover:underline"
+            : "text-muted-foreground"
+        }
       >
         next →
       </a>

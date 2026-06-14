@@ -9,25 +9,18 @@ export default async function QueriesPage() {
   return (
     <section>
       <h1>Queries</h1>
-      <p style={{ color: "var(--muted)" }}>
+      <p className="text-muted-foreground">
         Most recent {rows.length} audited retrievals from the pipeline. Click a row
         to see the full audit record and the assembled context.
       </p>
 
       {rows.length === 0 ? (
-        <div
-          style={{
-            padding: 24,
-            border: "1px dashed var(--border)",
-            borderRadius: 6,
-            color: "var(--muted)",
-          }}
-        >
+        <div className="rounded-md border border-dashed p-6 text-muted-foreground">
           No queries yet. Try ingesting a git repo with{" "}
           <code>make ingest-git REPO=…</code> and then call the MCP server.
         </div>
       ) : (
-        <div style={{ border: "1px solid var(--border)", borderRadius: 6, marginTop: 12 }}>
+        <div className="mt-3 rounded-md border">
           {rows.map((r) => (
             <QueryRow
               key={r.id}

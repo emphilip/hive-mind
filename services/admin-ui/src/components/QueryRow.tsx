@@ -18,29 +18,14 @@ export function QueryRow(props: QueryRowProps) {
   return (
     <Link
       href={`/queries/${props.id}`}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "120px 100px 80px 1fr 140px 80px 60px",
-        gap: 12,
-        padding: "8px 12px",
-        borderBottom: "1px solid var(--border)",
-        color: "inherit",
-        textDecoration: "none",
-      }}
+      className="grid grid-cols-[120px_100px_80px_1fr_140px_80px_60px] gap-3 border-b px-3 py-2 text-foreground no-underline transition-colors last:border-b-0 hover:bg-accent/50"
     >
-      <span style={{ color: "var(--muted)", fontFamily: "monospace" }}>
+      <span className="font-mono text-muted-foreground">
         {new Date(props.created_at).toLocaleTimeString()}
       </span>
       <span>{props.principal}</span>
-      <span style={{ color: "var(--muted)" }}>{props.tool}</span>
-      <span
-        style={{
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-        title={props.query}
-      >
+      <span className="text-muted-foreground">{props.tool}</span>
+      <span className="truncate" title={props.query}>
         {props.query}
       </span>
       <TokenBar
@@ -48,14 +33,15 @@ export function QueryRow(props: QueryRowProps) {
         tokens_out={props.tokens_out}
         compact
       />
-      <span style={{ textAlign: "right", color: "var(--muted)" }}>
+      <span className="text-right text-muted-foreground">
         {props.latency_ms} ms
       </span>
       <span
-        style={{
-          color: isError ? "var(--error)" : "var(--success)",
-          fontWeight: 600,
-        }}
+        className={
+          isError
+            ? "font-semibold text-destructive"
+            : "font-semibold text-emerald-600 dark:text-emerald-400"
+        }
       >
         {isError ? "ERR" : "OK"}
       </span>

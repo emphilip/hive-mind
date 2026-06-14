@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
 import "./globals.css";
 
+import { Sidebar } from "@/components/Sidebar";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { Toaster } from "@/components/ui/sonner";
+
 export const metadata = {
   title: "Hive Mind — Admin",
   description: "Inspect queries, audits, and provider health.",
@@ -8,27 +12,13 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
-        <header
-          style={{
-            padding: "12px 24px",
-            borderBottom: "1px solid var(--border)",
-            display: "flex",
-            gap: 24,
-            alignItems: "center",
-          }}
-        >
-          <strong>hive-mind</strong>
-          <nav style={{ display: "flex", gap: 16 }}>
-            <a href="/queries">Queries</a>
-            <a href="/vectors">Vectors</a>
-            <a href="/entities">Entities</a>
-            <a href="/ingestion">Ingestion</a>
-            <a href="/graph">Graph</a>
-          </nav>
-        </header>
-        <main style={{ padding: "16px 24px", maxWidth: 1200, margin: "0 auto" }}>{children}</main>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <Sidebar />
+          <main className="mx-auto max-w-6xl px-6 py-6 md:ml-56">{children}</main>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

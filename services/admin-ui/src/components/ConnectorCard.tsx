@@ -1,4 +1,7 @@
 import type { ConnectorStatus } from "@hive-mind/shared";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 export interface ConnectorCardProps {
   connector: ConnectorStatus;
@@ -7,40 +10,31 @@ export interface ConnectorCardProps {
 
 export function ConnectorCard({ connector, lastRunSummary }: ConnectorCardProps) {
   return (
-    <article
-      style={{
-        padding: 12,
-        border: "1px solid var(--border)",
-        borderRadius: 6,
-        background: connector.supported ? "white" : "var(--code-bg)",
-        opacity: connector.supported ? 1 : 0.7,
-      }}
-    >
-      <header style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-        <strong>{connector.name}</strong>
-        <span
-          style={{
-            fontSize: 11,
-            padding: "1px 6px",
-            borderRadius: 4,
-            background: connector.supported ? "#dcfce7" : "#fef3c7",
-            color: connector.supported ? "var(--success)" : "var(--warn)",
-            fontWeight: 600,
-          }}
+    <Card className={cn(!connector.supported && "bg-muted/50 opacity-70")}>
+      <CardHeader className="flex-row items-baseline gap-2 space-y-0 p-4 pb-0">
+        <CardTitle className="text-sm">{connector.name}</CardTitle>
+        <Badge
+          variant={connector.supported ? "secondary" : "outline"}
+          className={cn(
+            "px-1.5 py-0 text-[11px]",
+            connector.supported
+              ? "text-emerald-600 dark:text-emerald-400"
+              : "text-amber-600 dark:text-amber-400",
+          )}
         >
           {connector.supported ? "supported" : "deferred"}
-        </span>
-      </header>
-      {connector.reason ? (
-        <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
-          {connector.reason}
-        </p>
-      ) : null}
-      {lastRunSummary ? (
-        <p style={{ margin: "6px 0 0", fontSize: 12 }}>
-          <span style={{ color: "var(--muted)" }}>last run:</span> {lastRunSummary}
-        </p>
-      ) : null}
-    </article>
+        </Badge>
+      </CardHeader>
+      <CardContent className="p-4 pt-0">
+        {connector.reason ? (
+          <p className="mt-1.5 text-xs text-muted-foreground">{connector.reason}</p>
+        ) : null}
+        {lastRunSummary ? (
+          <p className="mt-1.5 text-xs">
+            <span className="text-muted-foreground">last run:</span> {lastRunSummary}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

@@ -31,15 +31,7 @@ export function EntityDetailView({ entity }: { entity: Entity }) {
   return (
     <>
       {error ? (
-        <div
-          style={{
-            padding: 12,
-            marginBottom: 12,
-            color: "var(--error)",
-            border: "1px solid var(--error)",
-            borderRadius: 6,
-          }}
-        >
+        <div className="mb-3 rounded-md border border-destructive/50 p-3 text-sm text-red-600 dark:text-red-400">
           {error}
         </div>
       ) : null}

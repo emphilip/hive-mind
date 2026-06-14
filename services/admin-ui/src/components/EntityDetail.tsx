@@ -1,16 +1,21 @@
 import Link from "next/link";
 import type { Entity } from "@hive-mind/shared";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const BODY_PREVIEW_CHARS = 50_000;
 
 function Pair({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: 12, color: "var(--muted)" }}>{label}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
       <div
-        style={{
-          fontFamily: typeof value === "string" && value.length > 20 ? "monospace" : "inherit",
-        }}
+        className={cn(
+          "break-all text-sm",
+          typeof value === "string" && value.length > 20 && "font-mono",
+        )}
       >
         {value}
       </div>
@@ -36,167 +41,124 @@ export function EntityDetail({
   const bodyShown = showFullBody ? entity.body : entity.body.slice(0, BODY_PREVIEW_CHARS);
 
   return (
-    <article style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <header style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <h2 style={{ margin: 0, fontFamily: "monospace" }}>
+    <article className="flex flex-col gap-4">
+      <header className="flex flex-wrap items-baseline gap-3">
+        <h2 className="m-0 font-mono text-xl font-semibold">
           {entity.title ?? entity.source_uri}
         </h2>
         {tombstoned ? (
-          <span
-            style={{
-              color: "var(--error)",
-              background: "#fee2e2",
-              padding: "2px 8px",
-              borderRadius: 4,
-              fontWeight: 600,
-              fontSize: 12,
-            }}
-          >
+          <Badge variant="destructive">
             Tombstoned at {new Date(entity.tombstoned_at as string).toLocaleString()}
-          </span>
+          </Badge>
         ) : null}
       </header>
 
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: 12,
-          padding: 12,
-          border: "1px solid var(--border)",
-          borderRadius: 6,
-        }}
-      >
-        <Pair label="entity_id" value={entity.entity_id} />
-        <Pair label="source" value={entity.source} />
-        <Pair label="source_uri" value={entity.source_uri} />
-        <Pair label="classification" value={entity.classification} />
-        <Pair label="freshness_state" value={entity.freshness_state} />
-        <Pair label="content_hash" value={entity.content_hash.slice(0, 16) + "…"} />
-        <Pair
-          label="last_verified_at"
-          value={new Date(entity.last_verified_at).toLocaleString()}
-        />
-        <Pair
-          label="ingested_at"
-          value={new Date(entity.ingested_at).toLocaleString()}
-        />
-        <Pair
-          label="updated_at"
-          value={new Date(entity.updated_at).toLocaleString()}
-        />
-      </section>
+      <Card>
+        <CardContent className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Pair label="entity_id" value={entity.entity_id} />
+          <Pair label="source" value={entity.source} />
+          <Pair label="source_uri" value={entity.source_uri} />
+          <Pair label="classification" value={entity.classification} />
+          <Pair label="freshness_state" value={entity.freshness_state} />
+          <Pair label="content_hash" value={entity.content_hash.slice(0, 16) + "…"} />
+          <Pair
+            label="last_verified_at"
+            value={new Date(entity.last_verified_at).toLocaleString()}
+          />
+          <Pair
+            label="ingested_at"
+            value={new Date(entity.ingested_at).toLocaleString()}
+          />
+          <Pair
+            label="updated_at"
+            value={new Date(entity.updated_at).toLocaleString()}
+          />
+        </CardContent>
+      </Card>
 
       <section>
-        <h3 style={{ marginTop: 0, marginBottom: 8 }}>Lineage</h3>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 16,
-            padding: 12,
-            border: "1px solid var(--border)",
-            borderRadius: 6,
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Parent</div>
-            {entity.lineage.parent ? (
-              <Link
-                href={`/entities/${entity.lineage.parent.entity_id}`}
-                style={{ fontFamily: "monospace" }}
-              >
-                {entity.lineage.parent.title ?? entity.lineage.parent.source_uri}
-              </Link>
-            ) : (
-              <span style={{ color: "var(--muted)" }}>—</span>
-            )}
-          </div>
-          <div>
-            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>
-              Children ({entity.lineage.children.length})
+        <h3 className="mb-2 mt-0 text-base font-semibold">Lineage</h3>
+        <Card>
+          <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+            <div>
+              <div className="mb-1 text-xs text-muted-foreground">Parent</div>
+              {entity.lineage.parent ? (
+                <Link
+                  href={`/entities/${entity.lineage.parent.entity_id}`}
+                  className="font-mono text-sm text-primary underline-offset-4 hover:underline"
+                >
+                  {entity.lineage.parent.title ?? entity.lineage.parent.source_uri}
+                </Link>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
             </div>
-            {entity.lineage.children.length === 0 ? (
-              <span style={{ color: "var(--muted)" }}>—</span>
-            ) : (
-              <ul style={{ margin: 0, paddingLeft: 18, maxHeight: 200, overflow: "auto" }}>
-                {entity.lineage.children.map((c) => (
-                  <li key={c.entity_id} style={{ fontFamily: "monospace", fontSize: 12 }}>
-                    <Link href={`/entities/${c.entity_id}`}>
-                      {c.title ?? c.source_uri}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
+            <div>
+              <div className="mb-1 text-xs text-muted-foreground">
+                Children ({entity.lineage.children.length})
+              </div>
+              {entity.lineage.children.length === 0 ? (
+                <span className="text-muted-foreground">—</span>
+              ) : (
+                <ul className="m-0 max-h-[200px] list-disc overflow-auto pl-5">
+                  {entity.lineage.children.map((c) => (
+                    <li key={c.entity_id} className="font-mono text-xs">
+                      <Link
+                        href={`/entities/${c.entity_id}`}
+                        className="text-primary underline-offset-4 hover:underline"
+                      >
+                        {c.title ?? c.source_uri}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
       <section>
-        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <h3 style={{ margin: 0 }}>Body</h3>
+        <header className="flex items-baseline justify-between">
+          <h3 className="m-0 text-base font-semibold">Body</h3>
           {bodyTooLong ? (
-            <button
-              type="button"
-              onClick={onToggleFullBody}
-              style={{
-                fontSize: 12,
-                background: "transparent",
-                border: "1px solid var(--border)",
-                borderRadius: 4,
-                padding: "4px 8px",
-                cursor: "pointer",
-              }}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={onToggleFullBody}>
               {showFullBody ? "Collapse" : `Show full body (${entity.body.length} chars)`}
-            </button>
+            </Button>
           ) : null}
         </header>
-        <pre
-          style={{
-            marginTop: 8,
-            maxHeight: 400,
-            overflow: "auto",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
+        <pre className="mt-2 max-h-[400px] overflow-auto whitespace-pre-wrap break-words rounded-md border bg-muted p-3 text-sm">
           {bodyShown}
           {!showFullBody && bodyTooLong ? "\n\n… (truncated)" : ""}
         </pre>
       </section>
 
       <section>
-        <h3 style={{ marginTop: 0, marginBottom: 8 }}>Metadata</h3>
-        <pre
-          style={{
-            margin: 0,
-            maxHeight: 200,
-            overflow: "auto",
-            fontSize: 12,
-          }}
-        >
+        <h3 className="mb-2 mt-0 text-base font-semibold">Metadata</h3>
+        <pre className="m-0 max-h-[200px] overflow-auto rounded-md border bg-muted p-3 text-xs">
           {JSON.stringify(entity.metadata, null, 2)}
         </pre>
       </section>
 
       <section>
-        <h3 style={{ marginTop: 0, marginBottom: 8 }}>
+        <h3 className="mb-2 mt-0 text-base font-semibold">
           Recent audit appearances ({entity.audit_appearances.length})
         </h3>
         {entity.audit_appearances.length === 0 ? (
-          <p style={{ color: "var(--muted)", margin: 0 }}>
+          <p className="m-0 text-sm text-muted-foreground">
             This entity has not appeared in recently assembled context.
           </p>
         ) : (
-          <ul style={{ margin: 0, paddingLeft: 20 }}>
+          <ul className="m-0 list-disc pl-5">
             {entity.audit_appearances.map((appearance) => (
-              <li key={appearance.id} style={{ marginBottom: 6 }}>
-                <a href={`/queries/${appearance.id}`}>
+              <li key={appearance.id} className="mb-1.5">
+                <a
+                  href={`/queries/${appearance.id}`}
+                  className="text-primary underline-offset-4 hover:underline"
+                >
                   {appearance.query || appearance.tool}
                 </a>{" "}
-                <span style={{ color: "var(--muted)", fontSize: 12 }}>
+                <span className="text-xs text-muted-foreground">
                   {new Date(appearance.created_at).toLocaleString()} ·{" "}
                   {appearance.outcome}
                 </span>
@@ -207,35 +169,27 @@ export function EntityDetail({
       </section>
 
       {!tombstoned && onTombstone ? (
-        <section
-          style={{
-            border: "1px solid var(--error)",
-            borderRadius: 6,
-            padding: 12,
-            background: "#fef2f2",
-          }}
-        >
-          <strong style={{ color: "var(--error)" }}>Tombstone entity</strong>
-          <p style={{ marginTop: 6, color: "var(--muted)", fontSize: 13 }}>
-            Soft-delete this entity. It will be excluded from future retrievals.
-            This action is reversible only by re-ingesting the source.
-          </p>
-          <button
-            type="button"
-            onClick={onTombstone}
-            style={{
-              marginTop: 6,
-              background: "var(--error)",
-              color: "white",
-              border: "none",
-              padding: "8px 16px",
-              borderRadius: 4,
-              cursor: "pointer",
-            }}
-          >
-            Tombstone
-          </button>
-        </section>
+        <Card className="border-destructive/50">
+          <CardHeader className="p-4 pb-0">
+            <CardTitle className="text-red-600 dark:text-red-400">
+              Tombstone entity
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              Soft-delete this entity. It will be excluded from future retrievals.
+              This action is reversible only by re-ingesting the source.
+            </p>
+            <Button
+              type="button"
+              variant="destructive"
+              className="mt-1.5"
+              onClick={onTombstone}
+            >
+              Tombstone
+            </Button>
+          </CardContent>
+        </Card>
       ) : null}
     </article>
   );

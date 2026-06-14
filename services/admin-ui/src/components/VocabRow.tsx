@@ -3,6 +3,8 @@
 import type { RelationshipType } from "@hive-mind/shared";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { RelationshipTypeBadge } from "./RelationshipTypeBadge";
 
 export function VocabRow({ item }: { item: RelationshipType }) {
@@ -25,10 +27,13 @@ export function VocabRow({ item }: { item: RelationshipType }) {
     router.refresh();
   }
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "160px 1fr 100px", gap: 12, padding: 10, borderBottom: "1px solid var(--border)" }}>
+    <div className="grid grid-cols-[160px_1fr_auto] items-center gap-3 border-b px-2 py-2.5 text-sm">
       <RelationshipTypeBadge type={item.name} />
-      <input aria-label={`${item.name} description`} value={description} onChange={(event) => setDescription(event.target.value)} />
-      <span><button onClick={save}>Save</button>{" "}<button onClick={deprecate}>Deprecate</button></span>
+      <Input aria-label={`${item.name} description`} value={description} onChange={(event) => setDescription(event.target.value)} className="h-8" />
+      <span className="flex gap-1.5">
+        <Button size="sm" variant="secondary" onClick={save}>Save</Button>
+        <Button size="sm" variant="destructive" onClick={deprecate}>Deprecate</Button>
+      </span>
     </div>
   );
 }

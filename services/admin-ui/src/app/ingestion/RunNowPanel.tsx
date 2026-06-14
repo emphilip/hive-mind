@@ -2,6 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 export function RunNowPanel() {
   const router = useRouter();
@@ -31,63 +35,37 @@ export function RunNowPanel() {
     setBusy(false);
     if (!res.ok) {
       setError(`Run failed (${res.status})`);
+      toast.error(`Run failed (${res.status})`);
       return;
     }
+    toast.success("Ingestion run started");
     setRepoUrl("");
     router.refresh();
   };
 
   return (
-    <form
-      onSubmit={submit}
-      style={{
-        display: "flex",
-        gap: 8,
-        padding: 12,
-        border: "1px solid var(--border)",
-        borderRadius: 6,
-      }}
-    >
-      <input
-        type="url"
-        name="repo_url"
-        value={repoUrl}
-        onChange={(e) => setRepoUrl(e.target.value)}
-        placeholder="https://github.com/owner/repo"
-        required
-        style={{
-          flex: 1,
-          padding: "8px 10px",
-          border: "1px solid var(--border)",
-          borderRadius: 4,
-          fontSize: 14,
-        }}
-      />
-      <button
-        type="submit"
-        disabled={busy}
-        style={{
-          padding: "8px 16px",
-          background: "var(--accent)",
-          color: "white",
-          border: "none",
-          borderRadius: 4,
-          cursor: busy ? "wait" : "pointer",
-        }}
-      >
-        {busy ? "Starting…" : "Run now"}
-      </button>
-      {error ? (
-        <span
-          style={{
-            alignSelf: "center",
-            color: "var(--error)",
-            fontSize: 12,
-          }}
-        >
-          {error}
-        </span>
-      ) : null}
-    </form>
+    <Card>
+      <CardContent className="p-3">
+        <form onSubmit={submit} className="flex items-center gap-2">
+          <Input
+            type="url"
+            name="repo_url"
+            value={repoUrl}
+            onChange={(e) => setRepoUrl(e.target.value)}
+            placeholder="https://github.com/owner/repo"
+            required
+            className="flex-1"
+          />
+          <Button type="submit" disabled={busy} className={busy ? "cursor-wait" : ""}>
+            {busy ? "Starting…" : "Run now"}
+          </Button>
+          {error ? (
+            <span className="self-center text-xs text-red-600 dark:text-red-400">
+              {error}
+            </span>
+          ) : null}
+        </form>
+      </CardContent>
+    </Card>
   );
 }

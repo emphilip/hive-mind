@@ -3,6 +3,7 @@
 import type { RelationshipEdge } from "@hive-mind/shared";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { RelationshipTypeBadge } from "./RelationshipTypeBadge";
 
 export function CandidateEdgeRow({ edge, evidenceEntityIds = [] }: { edge: RelationshipEdge; evidenceEntityIds?: string[] }) {
@@ -37,11 +38,24 @@ export function CandidateEdgeRow({ edge, evidenceEntityIds = [] }: { edge: Relat
     router.refresh();
   }
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "130px 1fr 80px 230px", gap: 12, padding: 10, borderBottom: "1px solid var(--border)", alignItems: "center" }}>
+    <div className="grid grid-cols-[130px_1fr_80px_auto] items-center gap-3 border-b px-2 py-2.5 text-sm">
       <RelationshipTypeBadge type={edge.type} />
-      <span>{edge.from_concept_id} → {edge.to_concept_id}<br />{evidenceEntityIds.map((id) => <a key={id} href={`/entities/${id}`} style={{ marginRight: 8 }}>evidence</a>)}</span>
-      <span>{edge.confidence.toFixed(2)}</span>
-      <span><button disabled={busy} onClick={() => action("promote")}>Promote</button>{" "}<button disabled={busy} onClick={() => action("demote")}>Demote</button>{" "}<button disabled={busy} onClick={edit}>Edit</button>{" "}<button disabled={busy} onClick={remove}>Delete</button></span>
+      <span>
+        {edge.from_concept_id} → {edge.to_concept_id}
+        <br />
+        {evidenceEntityIds.map((id) => (
+          <a key={id} href={`/entities/${id}`} className="mr-2 text-primary underline-offset-4 hover:underline">
+            evidence
+          </a>
+        ))}
+      </span>
+      <span className="text-muted-foreground">{edge.confidence.toFixed(2)}</span>
+      <span className="flex gap-1.5">
+        <Button size="sm" disabled={busy} onClick={() => action("promote")}>Promote</Button>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => action("demote")}>Demote</Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={edit}>Edit</Button>
+        <Button size="sm" variant="destructive" disabled={busy} onClick={remove}>Delete</Button>
+      </span>
     </div>
   );
 }

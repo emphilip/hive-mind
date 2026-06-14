@@ -10,42 +10,21 @@ export function TokenBar({ tokens_in, tokens_out, compact = false }: TokenBarPro
   const outPct = 100 - inPct;
   return (
     <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 2,
-      }}
+      className="flex flex-col gap-0.5"
       title={`in: ${tokens_in}, out: ${tokens_out}`}
     >
       {!compact && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: 12,
-            color: "var(--muted)",
-          }}
-        >
+        <div className="flex justify-between text-xs text-muted-foreground">
           <span>↑ {tokens_in}</span>
           <span>↓ {tokens_out}</span>
         </div>
       )}
-      <div
-        style={{
-          display: "flex",
-          height: compact ? 6 : 8,
-          background: "var(--code-bg)",
-          borderRadius: 4,
-          overflow: "hidden",
-        }}
-      >
+      <div className={`flex overflow-hidden rounded bg-muted ${compact ? "h-1.5" : "h-2"}`}>
+        <span className="bg-primary" style={{ width: `${inPct}%` }} />
         <span
-          style={{
-            width: `${inPct}%`,
-            background: "var(--accent)",
-          }}
+          className="bg-emerald-600 dark:bg-emerald-400"
+          style={{ width: `${outPct}%` }}
         />
-        <span style={{ width: `${outPct}%`, background: "var(--success)" }} />
       </div>
     </div>
   );

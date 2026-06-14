@@ -1,4 +1,6 @@
 import type { VectorSearchHit } from "@hive-mind/shared";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 export interface VectorHitProps {
   hit: VectorSearchHit;
@@ -8,78 +10,38 @@ export interface VectorHitProps {
 
 export function VectorHit({ hit, rank, onShowNeighbours }: VectorHitProps) {
   return (
-    <article
-      style={{
-        padding: 12,
-        borderBottom: "1px solid var(--border)",
-        display: "grid",
-        gridTemplateColumns: "32px 1fr 110px",
-        gap: 12,
-        alignItems: "start",
-      }}
-    >
-      <span
-        style={{
-          fontFamily: "monospace",
-          color: "var(--muted)",
-          fontSize: 13,
-        }}
-      >
-        #{rank}
-      </span>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-          <strong style={{ fontFamily: "monospace" }}>{hit.title ?? hit.entity_id}</strong>
-          <span style={{ color: "var(--muted)", fontSize: 12 }}>{hit.source}</span>
+    <article className="grid grid-cols-[32px_1fr_110px] items-start gap-3 border-b p-3 last:border-b-0">
+      <span className="font-mono text-[13px] text-muted-foreground">#{rank}</span>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <strong className="font-mono">{hit.title ?? hit.entity_id}</strong>
+          <span className="text-xs text-muted-foreground">{hit.source}</span>
           {hit.collection ? (
-            <span
-              style={{
-                fontSize: 11,
-                color: "var(--muted)",
-                background: "var(--code-bg)",
-                padding: "1px 6px",
-                borderRadius: 4,
-              }}
+            <Badge
+              variant="secondary"
+              className="px-1.5 py-0 text-[11px] font-normal text-muted-foreground"
             >
               {hit.collection}
-            </span>
+            </Badge>
           ) : null}
         </div>
-        <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 2 }}>
-          {hit.source_uri}
-        </div>
-        <p
-          style={{
-            margin: "8px 0 0",
-            color: "#374151",
-            fontSize: 13,
-            lineHeight: 1.5,
-          }}
-        >
+        <div className="mt-0.5 text-xs text-muted-foreground">{hit.source_uri}</div>
+        <p className="mt-2 text-[13px] leading-relaxed text-foreground/80">
           {hit.snippet}
         </p>
       </div>
-      <div style={{ textAlign: "right" }}>
-        <div style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 600 }}>
-          {hit.score.toFixed(4)}
-        </div>
+      <div className="text-right">
+        <div className="font-mono text-base font-semibold">{hit.score.toFixed(4)}</div>
         {onShowNeighbours ? (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => onShowNeighbours(hit)}
-            style={{
-              marginTop: 6,
-              padding: "4px 8px",
-              fontSize: 12,
-              color: "var(--accent)",
-              background: "transparent",
-              border: "1px solid var(--border)",
-              borderRadius: 4,
-              cursor: "pointer",
-            }}
+            className="mt-1.5 text-xs text-primary"
           >
             show neighbours
-          </button>
+          </Button>
         ) : null}
       </div>
     </article>

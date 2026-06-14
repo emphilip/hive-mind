@@ -2,10 +2,19 @@ import { CandidateEdgeRow } from "@/components/CandidateEdgeRow";
 import { ConceptDetail } from "@/components/ConceptDetail";
 import { ConceptRow } from "@/components/ConceptRow";
 import { VocabRow } from "@/components/VocabRow";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { VocabCreateForm } from "./GraphActions";
 import { getGraphConcept, listGraphConcepts, listGraphEdges, listGraphVocabulary } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
+
+const TABS = [
+  { value: "concepts", label: "Concepts" },
+  { value: "candidates", label: "Candidate review" },
+  { value: "vocabulary", label: "Vocabulary" },
+];
 
 export default async function GraphPage({ searchParams }: { searchParams: Promise<{ tab?: string; concept_id?: string; search?: string }> }) {
   const params = await searchParams;
@@ -17,19 +26,42 @@ export default async function GraphPage({ searchParams }: { searchParams: Promis
     params.concept_id ? getGraphConcept(params.concept_id) : Promise.resolve(null),
   ]);
   return (
-    <section>
-      <h1>Knowledge graph</h1>
-      <nav style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-        <a href="/graph?tab=concepts">Concepts</a>
-        <a href="/graph?tab=candidates">Candidate review</a>
-        <a href="/graph?tab=vocabulary">Vocabulary</a>
+    <section className="space-y-4">
+      <h1 className="text-2xl font-semibold tracking-tight">Knowledge graph</h1>
+      <nav className="mb-4 inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
+        {TABS.map((item) => (
+          <a
+            key={item.value}
+            href={`/graph?tab=${item.value}`}
+            className={cn(
+              "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all hover:text-foreground",
+              tab === item.value && "bg-background text-foreground shadow"
+            )}
+          >
+            {item.label}
+          </a>
+        ))}
       </nav>
       {detail ? <ConceptDetail concept={detail} /> : tab === "candidates" ? (
-        <div><h2>Candidate review</h2>{candidates.items.length ? candidates.items.map((edge) => <CandidateEdgeRow key={edge.edge_id} edge={edge} evidenceEntityIds={edge.evidence_entity_ids} />) : <p>No candidate edges.</p>}</div>
+        <div>
+          <h2 className="mb-2 text-lg font-semibold">Candidate review</h2>
+          {candidates.items.length ? candidates.items.map((edge) => <CandidateEdgeRow key={edge.edge_id} edge={edge} evidenceEntityIds={edge.evidence_entity_ids} />) : <p className="text-sm text-muted-foreground">No candidate edges.</p>}
+        </div>
       ) : tab === "vocabulary" ? (
-        <div><h2>Vocabulary</h2><VocabCreateForm />{vocabulary.map((item) => <VocabRow key={item.name} item={item} />)}</div>
+        <div>
+          <h2 className="mb-2 text-lg font-semibold">Vocabulary</h2>
+          <VocabCreateForm />
+          {vocabulary.map((item) => <VocabRow key={item.name} item={item} />)}
+        </div>
       ) : (
-        <div><h2>Concepts</h2><form><input name="search" placeholder="Search concepts" defaultValue={params.search || ""} /><button>Search</button></form>{concepts.items.length ? concepts.items.map((concept) => <ConceptRow key={concept.concept_id} concept={concept} />) : <p>No concepts.</p>}</div>
+        <div>
+          <h2 className="mb-2 text-lg font-semibold">Concepts</h2>
+          <form className="mb-3 flex gap-2">
+            <Input name="search" placeholder="Search concepts" defaultValue={params.search || ""} className="max-w-xs" />
+            <Button variant="secondary">Search</Button>
+          </form>
+          {concepts.items.length ? concepts.items.map((concept) => <ConceptRow key={concept.concept_id} concept={concept} />) : <p className="text-sm text-muted-foreground">No concepts.</p>}
+        </div>
       )}
     </section>
   );
